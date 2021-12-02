@@ -1,0 +1,15 @@
+This directory contains the code for creating tessellations of triangles.
+Since it uses a different method of creating the triangular meshes from
+the Voronoi class DRegion, we have to use ksRegion.h. The code also uses
+the Visual class for the graphics hence it does not need the old morphologica
+display library.
+
+To build and run
+
+1. Make a build directory and compile from it with cmake ..
+
+2. make ksTriangle builds the executable
+
+3. Then we have to prepare the json file by editing and running kst.
+
+4. Finally run with python runksTriangle.py
