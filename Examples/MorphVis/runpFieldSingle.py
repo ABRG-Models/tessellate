@@ -9,7 +9,9 @@ import os
 #now move the seed points file to the logsMorph directory
 command = "cp centres.inp ./logsMorph"
 os.system(command)
+command = "cp pFieldSingle.json ./logsMorph"
+os.system(command)
 #now run the main program
-command = "./build/pFieldVis pFieldVis.json >output"
+command = "./build/pFieldSingle pFieldSingle.json "
 os.system(command)
 print("script finished")

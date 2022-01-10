@@ -1,4 +1,3 @@
-
 #!/bin/zsh
 
 ## Set the parameters for displayCircles, to apply the cookie cutter method
@@ -35,10 +34,10 @@
 ## NUMPOINTS: number of seed points for Voronoi tessellation
 
 
-            cat > ./pFieldVis.json <<EOF
+            cat > ./pFieldSingle.json <<EOF
 {
     "logpath" : "./logsMorph",
-    "dt": 0.0001,
+    "dt": 0.00001,
     "Dn": $1,
     "Dchi" : $2,
     "Dc" : $3,
@@ -47,16 +46,15 @@
     "numsteps": 100001,
     "numAdjust" : 100000,
     "numprint" : 100,
-    "Lcontinue" : true,
+    "Lcontinue" : false,
     "LfixedSeed" : true,
     "Lgraphics" : true,
     "LDn" : false,
     "numSectors" : 12,
     "aNoiseGain" : 0.1,
-    "boundaryFalloffDist" : 0.0078,
+    "boundaryFalloffDist" : 0.01,
     "nnInitialOffset" : 1.0,
     "ccInitialOffset" : 2.5,
-    "lengthScale" : 29.0,
     "overwrite_logs" : true,
     "skipMorph" : false,
     "lPerturb" : true,
@@ -65,8 +63,8 @@
     "off" : 1,
     "plotevery" : 10000,
     "saveplots" : true,
-    "vidframes" : true,
-    "win_width" : 2050,
+    "vidframes" : false,
+    "win_width" : 1025,
     "NUMPOINTS" : 41
 }
 EOF

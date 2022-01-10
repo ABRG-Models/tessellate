@@ -22,7 +22,7 @@
 #include <algorithm>
 #include <string>
 
-/! Helper function to save PNG images with a suitable name
+// Helper function to save PNG images with a suitable name
 void savePngs (const std::string& logpath, const std::string& name,
                unsigned int frameN, morph::Visual& v)
 {
@@ -127,6 +127,7 @@ int main (int argc, char **argv)
         float aNoiseGain = conf.getFloat("aNoiseGain",0.1);
         float nnInitialOffset = conf.getFloat("nnInitialOffet", 1.0);
         float ccInitialOffset = conf.getFloat("ccInitialOffset",2.5);
+        float lengthScale = conf.getFloat("lengthScale",29.0f);
 #else
         double dt = conf.getDouble("dt",0.0001);
         double Dn = conf.getDouble("Dn",1.0);
@@ -137,6 +138,7 @@ int main (int argc, char **argv)
         double aNoiseGain = conf.getDouble("aNoiseGain",0.1);
         double nnInitialOffset = conf.getDouble("nnInitialOffet", 1.0);
         double ccInitialOffset = conf.getDouble("ccInitialOffset",2.5);
+        double lengthScale = conf.getDouble("lengthScale",29.0);
 #endif
     int numSectors = conf.getInt("numsectors",12);
     int scale = conf.getInt("scale",8);
@@ -153,10 +155,10 @@ int main (int argc, char **argv)
     cout << " Lcontinue " << Lcontinue << " skipMorph " << skipMorph << endl;
     ofstream afile (logpath + "/centroids.out",ios::app);
     // adjust the number of steps according to the Dn number
-    numsteps = numsteps * floor(sqrt(36.0/Dn));
-    numprint  = numprint * floor(sqrt(36.0/Dn));
+    //numsteps = numsteps * floor(sqrt(36.0/Dn));
+    //numprint  = numprint * floor(sqrt(36.0/Dn));
     // adjust the time step for the Dn values
-    dt = dt * sqrt(Dn/36.0);
+    //dt = dt * sqrt(Dn/36.0);
     //set up a vtxVisual pointer
     vtxVisual* cv;
 
@@ -240,7 +242,7 @@ int main (int argc, char **argv)
     M.populateBoundPolygon(1);
     cout << "just after setting polygonal boundaries " << M.curvedBoundary.size()<<endl;
     for (unsigned int j = 0;j<numpoints;j++) {
-        S.push_back(ksSolver(scale, xspan, logpath, M.curvedBoundary[j], M.centroids[j]));
+        S.push_back(ksSolver(scale, xspan, logpath, M.curvedBoundary[j], M.centroids[j],lengthScale));
         cout << "in the loop populating the ksVector morph0 "<< j <<endl;
     }
     cout << "first setting of centroids" << endl;
@@ -292,8 +294,8 @@ int main (int argc, char **argv)
     unsigned int framecount = 0;
 
     // Window width and height
-    const unsigned int win_width = conf.getUInt ("win_width", 1025UL);
-    unsigned int win_height_default = static_cast<unsigned int>(0.8824f * (float)win_width);
+    const unsigned int win_width = conf.getUInt ("win_width", 2050UL);
+    unsigned int win_height_default = static_cast<unsigned int>(0.88f * (float)win_width);
     const unsigned int win_height = conf.getUInt ("win_height", win_height_default);
     cout << "just before new Visual object" << endl;
     // Set up the morph::Visual object which provides the visualization scene (and
@@ -304,14 +306,14 @@ int main (int argc, char **argv)
     // 'RGBA', though the A(alpha) makes no difference.
     v1->backgroundWhite();
     //orthographic projection
-    v1->ptype = morph::perspective_type::orthographic;
-    v1->ortho_bl = {-1.0f, -1.0f};
-    v1->ortho_tr = {1.0f, 1.0f};
+    //v1->ptype = morph::perspective_type::orthographic;
+    //v1->ortho_bl = {-1.0f, -1.0f};
+    //v1->ortho_tr = {1.0f, 1.0f};
     // You can tweak the near and far clipping planes
     v1->zNear = 0.001;
-    v1->zFar = 20;
+    v1->zFar = 100;
     // And the field of view of the visual scene.
-    v1->fov = 45;
+    v1->fov = 40;
     // You can lock movement of the scene
     v1->sceneLocked = conf.getBool ("sceneLocked", false);
     // You can set the default scene x/y/z offsets
@@ -417,12 +419,13 @@ int main (int argc, char **argv)
     float xzero = 0.0f;
 
     // A. Offset in x direction to the left.
-    xzero -= 0.5*0.008;
+    xzero = 0.4 * M.Hgrid->width();
     spatOff = { xzero, 0.0, 0.0 };
     // Z position scaling - how hilly/bumpy the visual will be.
     Scale<FLT,float> zscale; zscale.setParams (0.0f, 0.0f);
     // The second is the colour scaling. Set this to autoscale.
     Scale<FLT,float> cscale; cscale.do_autoscale = true;
+
     unsigned int Agrid[numpoints];
 
     for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
@@ -440,32 +443,61 @@ int main (int argc, char **argv)
                                                                     morph::ColourMapType::Jet));
         }//end of loop on inner regions
     }//end of loop over regions
+
+    // A. Offset in x direction to the left.
+    xzero -= 0.8 * M.Hgrid->width();
+    spatOff = { xzero, 0.0, 0.0 };
+    // Z position scaling - how hilly/bumpy the visual will be.
+    unsigned int Bgrid[numpoints];
+    for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
+        if (M.innerRegion[j]) {
+            vector<FLT> regionNN;
+            //normalise over the region t
+            regionNN = L.normalise(S[j].NN);
+            Bgrid[j] = v1->addVisualModel (new HexGridVisual<FLT> (v1->shaderprog,
+                                                                    v1->tshaderprog,
+                                                                    S[j].Hgrid,
+                                                                    spatOff,
+                                                                    &(regionNN),
+                                                                    zscale,
+                                                                    cscale,
+                                                                    morph::ColourMapType::Jet));
+        }//end of loop on inner regions
+    }//end of loop over regions
 #endif
     // begin morph0 time stepping loop
     for (int i=0;i<numsteps;i++) {
    	    for (unsigned int j = 0;j<numpoints;j++) { //loop over all regions, only step internal ones
             if (M.innerRegion[j]) {
-                S[j].step(dt, DnVal[j], DchiVal[j], DcVal[j]);
+                S[j].stepEuler(dt, Dn, Dchi, Dc);
             }
         }
 #ifdef COMPILE_PLOTTING
-        if ((i % plotevery) == 0) {
+        if ((i % numprint) == 0) {
+            cout << "step " << i << " reached" << endl;
             for (unsigned int j=0; j<numpoints;j++) {
                 if (M.innerRegion[j]) { //only display inner regions
                     vector<FLT> regionNN;
-                    regionNN = L.normalise(S[j].NN);
+                    regionNN = L.normalise(S[j].lapNN);
                     VisualDataModel<FLT>* avm = (VisualDataModel<FLT>*)v1->getVisualModel (Agrid[j]);
                     avm->updateData (&regionNN);
                     avm->clearAutoscaleColour();
-                    if (saveplots) {
-                        if (vidframes) {
-                            savePngs (logpath, "nn0", framecount, *v1);
-                             ++framecount;
-                        }
-                        else {
-                             savePngs (logpath, "nn0", i , *v1);
-                        }
+                    regionNN = L.normalise(S[j].NN);
+                    VisualDataModel<FLT>* avm1 = (VisualDataModel<FLT>*)v1->getVisualModel (Bgrid[j]);
+                    avm1->updateData (&regionNN);
+                    avm1->clearAutoscaleColour();
+                    if (i%plotevery == 0) {
+                        std::cerr << std::setprecision(16) << " NN " << S[j].sum_NN << " lapNN " << S[j].sum_lapNN << " step " << i << " plotevery " << plotevery << std::endl;
                     }
+                }
+            }
+            if (i%plotevery == 0) {
+                if (vidframes) {
+                    savePngs (logpath, "nn0", framecount, *v1);
+                    ++framecount;
+                }
+                else {
+                    savePngs (logpath, "nn0", i , *v1);
                 }
             }
         }
@@ -639,9 +671,13 @@ int main (int argc, char **argv)
     M.populateBoundCurve(1);
     cout << "just after setting curved boundaries morph 1 " << M.curvedBoundary.size()<<endl;
     for (unsigned int j = 0;j<numpoints;j++) {
-        S.push_back(ksSolver(scale, xspan, logpath, M.curvedBoundary[j], M.centroids[j]));
-        cout << "in the loop populating the ksVector morph1   "<< j <<endl;
+        S.push_back(ksSolver(scale, xspan, logpath, M.curvedBoundary[j], M.centroids[j],lengthScale));
     }
+    for (unsigned int j = 0;j<numpoints;j++) {
+        S.push_back(ksSolver(scale, xspan, logpath, M.curvedBoundary[j], M.centroids[j],lengthScale));
+        cout << "in the loop populating the ksVector morph1   "<< j << " size S[j] " << S[j].Hgrid->hexen.size() << endl;
+    }
+    cout << "first morph  setting of centroids" << endl;
     cout << "first morph  setting of centroids" << endl;
     for (unsigned int j=0; j<numpoints;j++){
         afile << "centroid region " << j << " is ( " << M.centroids[j].first << " , " << M.centroids[j].second << " )" << endl;
@@ -720,6 +756,8 @@ int main (int argc, char **argv)
                     FLT bSig = 1.0 / ( 1.0 + exp (-100.0*(h.distToBoundary- boundaryFalloffDist)) );
                     S[j].NN[h.vi] = (S[j].NN[h.vi] - nnInitialOffset) * bSig + nnInitialOffset;
                     S[j].CC[h.vi] = (S[j].CC[h.vi] - ccInitialOffset) * bSig + ccInitialOffset;
+        //            S[j].NN[h.vi] = S[j].NN[h.vi] * bSig;
+        //            S[j].CC[h.vi] = S[j].CC[h.vi] * bSig;
 	    	    } //end of if on boundary distance
 	        }//end of loop over region
 	    }//end of loop over all regions
@@ -732,14 +770,16 @@ int main (int argc, char **argv)
     // Set a white background . This value has the order
     // 'RGBA', though the A(alpha) makes no difference.
     v2->backgroundWhite();
+/*
     v2->ptype = morph::perspective_type::orthographic;
     v2->ortho_bl = {-1.0f, -1.0f};
     v2->ortho_tr = {1.0f, 1.0f};
+*/
     // You can tweak the near and far clipping planes
     v2->zNear = 0.001;
-    v2->zFar = 20;
+    v2->zFar = 500;
     // And the field of view of the visual scene.
-    v2->fov = 45;
+    v2->fov = 40;
     // You can lock movement of the scene
     v2->sceneLocked = conf.getBool ("sceneLocked", false);
     // You can set the default scene x/y/z offsets
@@ -748,6 +788,7 @@ int main (int argc, char **argv)
                         conf.getFloat ("y_default", 0.0f));
     // Make this larger to "scroll in and out of the image" faster
     v2->scenetrans_stepsize = 0.5;
+    /*
     // now instantiate vtxVisual
     cv = new vtxVisual(v2->shaderprog, v2->tshaderprog, vtxVector, M.ds, M.ds);
     cout << " after creating vtxVisual " << endl;
@@ -765,15 +806,25 @@ int main (int argc, char **argv)
     frame << ".png";
     cout << " before save image " << endl;
     savePngs (logpath, "tessellation1", 0, *v2);
+    */
     v2->setCurrent();
-    cout << "before rendering v2 " << endl;
-    unsigned int Bgrid[numpoints];
+
+    // A. Offset in x direction to the left.
+    xzero = 0.4 * M.Hgrid->width();
+    spatOff = { xzero, 0.0, 0.0 };
+    // Z position scaling - how hilly/bumpy the visual will be.
+    //Scale<FLT,float> zscale; zscale.setParams (0.0f, 0.0f);
+    // The second is the colour scaling. Set this to autoscale.
+    //Scale<FLT,float> cscale; cscale.do_autoscale = true;
+
+    unsigned int Cgrid[numpoints];
+
     for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
         if (M.innerRegion[j]) {
             vector<FLT> regionNN;
             //normalise over the region t
             regionNN = L.normalise(S[j].NN);
-            Bgrid[j] = v2->addVisualModel (new HexGridVisual<FLT> (v2->shaderprog,
+            Cgrid[j] = v2->addVisualModel (new HexGridVisual<FLT> (v2->shaderprog,
                                                                     v2->tshaderprog,
                                                                     S[j].Hgrid,
                                                                     spatOff,
@@ -782,26 +833,56 @@ int main (int argc, char **argv)
                                                                     cscale,
                                                                     morph::ColourMapType::Jet));
         }//end of loop on inner regions
-    }//end of loop over region
+    }//end of loop over regions
+
+    // A. Offset in x direction to the left.
+    xzero -= 0.8 * M.Hgrid->width();
+    spatOff = { xzero, 0.0, 0.0 };
+    // Z position scaling - how hilly/bumpy the visual will be.
+    unsigned int Dgrid[numpoints];
+    for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
+        if (M.innerRegion[j]) {
+            vector<FLT> regionNN;
+            //normalise over the region t
+            regionNN = L.normalise(S[j].NN);
+            Dgrid[j] = v2->addVisualModel (new HexGridVisual<FLT> (v2->shaderprog,
+                                                                    v2->tshaderprog,
+                                                                    S[j].Hgrid,
+                                                                    spatOff,
+                                                                    &(regionNN),
+                                                                    zscale,
+                                                                    cscale,
+                                                                    morph::ColourMapType::Jet));
+        }//end of loop on inner regions
+    }//end of loop over regions
 #endif
     // begin third time stepping loop after first morph
+    std::cout << "before time stepping loop morph 1" << std::endl;
     for (int i=0;i<numsteps;i++) {
+        //std::cout << "in time stepping loop i " << i  << std::endl;
    	for (unsigned int j = 0;j<numpoints;j++){ //loop over regions, only set internal ones
-            S[j].step(dt, DnVal[j], DchiVal[j], DcVal[j]);
+             S[j].stepEuler(dt, DnVal[j], DchiVal[j], DcVal[j]);
+            //S[j].step(dt, Dn, Dchi, Dc);
+            //std::cout << "after stepping region " << j << std::endl;
         }
 #ifdef COMPILE_PLOTTING
-        if ((i % plotevery) == 0) {
+        if ((i % numprint) == 0) {
+            std::cout << "in plotevery of time loop i " << i << std::endl;
             for (unsigned int j=0; j<numpoints;j++) {
                 if (M.innerRegion[j]) { //only display inner regions
                     vector<FLT> regionNN;
-                    regionNN = L.normalise(S[j].NN);
-                    VisualDataModel<FLT>* avm = (VisualDataModel<FLT>*)v2->getVisualModel (Bgrid[j]);
+                    regionNN = L.normalise(S[j].lapNN);
+                    VisualDataModel<FLT>* avm = (VisualDataModel<FLT>*)v2->getVisualModel (Cgrid[j]);
                     avm->updateData (&regionNN);
                     avm->clearAutoscaleColour();
+                    regionNN = L.normalise(S[j].NN);
+                    VisualDataModel<FLT>* avm1 = (VisualDataModel<FLT>*)v2->getVisualModel (Dgrid[j]);
+                    avm1->updateData (&regionNN);
+                    avm1->clearAutoscaleColour();
                 }
             }
             v2->render();
-            if (saveplots) {
+            if (saveplots && (i%plotevery == 0)) {
                 if (vidframes) {
                     savePngs (logpath, "nn1", framecount, *v2);
                     ++framecount;
@@ -963,7 +1044,7 @@ int main (int argc, char **argv)
     cout << "just after setting curved boundaries morph 2 " << M.curvedBoundary.size()<<endl;
     for (unsigned int j = 0;j<numpoints;j++)
     {
-        S.push_back(ksSolver(scale, xspan, logpath, M.curvedBoundary[j], M.centroids[j]));
+        S.push_back(ksSolver(scale, xspan, logpath, M.curvedBoundary[j], M.centroids[j], lengthScale));
         cout << "in the loop populating the ksVector morph2 "<< j <<endl;
     }
     cout << "just after populating the ksVector"<<endl;
@@ -1060,15 +1141,17 @@ int main (int argc, char **argv)
     // Set a white background . This value has the order
     // 'RGBA', though the A(alpha) makes no difference.
     v3->backgroundWhite();
+    /*
     //orthographic projection
     v3->ptype = morph::perspective_type::orthographic;
     v3->ortho_bl = {-1.0f, -1.0f};
     v3->ortho_tr = {1.0f, 1.0f};
+    */
     // You can tweak the near and far clipping planes
     v3->zNear = 0.001;
-    v3->zFar = 20;
+    v3->zFar = 500;
     // And the field of view of the visual scene.
-    v3->fov = 45;
+    v3->fov = 40;
     // You can lock movement of the scene
     v3->sceneLocked = conf.getBool ("sceneLocked", false);
     // You can set the default scene x/y/z offsets
@@ -1078,6 +1161,7 @@ int main (int argc, char **argv)
     // Make this larger to "scroll in and out of the image" faster
     v3->scenetrans_stepsize = 0.5;
     cout << "end of setting new Visual object" << endl;
+    /*
     // now instantiate vtxVisual
     cv = new vtxVisual(v3->shaderprog, v3->tshaderprog, vtxVector, M.ds, M.ds);
     cout << " after creating vtxVisual " << endl;
@@ -1085,6 +1169,7 @@ int main (int argc, char **argv)
     cout << " after vtxVisual finalize " << endl;
     cv->addLabel("Tessellation morph 2", {0.0f, 1.1f, 0.0f});
     v3->addVisualModel(cv);
+    */
     frame << "log/agent/";
     frame.width(4);
     frame.fill('0');
@@ -1094,14 +1179,23 @@ int main (int argc, char **argv)
     savePngs (logpath, "tessellation2", 0, *v3);
     v3->setCurrent();
     //v3->render();
-    unsigned int Cgrid[numpoints];
+
+    // A. Offset in x direction to the left.
+    xzero = 0.4 * M.Hgrid->width();
+    spatOff = { xzero, 0.0, 0.0 };
+    // Z position scaling - how hilly/bumpy the visual will be.
+    //zscale; zscale.setParams (0.0f, 0.0f);
+    // The second is the colour scaling. Set this to autoscale.
+    //Scale<FLT,float> cscale; cscale.do_autoscale = true;
+
+    unsigned int Egrid[numpoints];
 
     for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
         if (M.innerRegion[j]) {
             vector<FLT> regionNN;
             //normalise over the region t
             regionNN = L.normalise(S[j].NN);
-            Cgrid[j] = v3->addVisualModel (new HexGridVisual<FLT> (v3->shaderprog,
+            Egrid[j] = v3->addVisualModel (new HexGridVisual<FLT> (v3->shaderprog,
                                                                     v3->tshaderprog,
                                                                     S[j].Hgrid,
                                                                     spatOff,
@@ -1110,24 +1204,50 @@ int main (int argc, char **argv)
                                                                     cscale,
                                                                     morph::ColourMapType::Jet));
         }//end of loop on inner regions
-    }//end of loop over region
-    #endif
+    }//end of loop over regions
+
+    // A. Offset in x direction to the left.
+    xzero -= 0.8 * M.Hgrid->width();
+    spatOff = { xzero, 0.0, 0.0 };
+    // Z position scaling - how hilly/bumpy the visual will be.
+    unsigned int Fgrid[numpoints];
+    for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
+        if (M.innerRegion[j]) {
+            vector<FLT> regionNN;
+            //normalise over the region t
+            regionNN = L.normalise(S[j].NN);
+            Fgrid[j] = v3->addVisualModel (new HexGridVisual<FLT> (v3->shaderprog,
+                                                                    v3->tshaderprog,
+                                                                    S[j].Hgrid,
+                                                                    spatOff,
+                                                                    &(regionNN),
+                                                                    zscale,
+                                                                    cscale,
+                                                                    morph::ColourMapType::Jet));
+        }//end of loop on inner regions
+    }//end of loop over regions
+#endif
 
      //begin fourth time stepping loop after second morph
     int loopsteps = 0;
     for (int i=0;i<numsteps;i++) {
         for (unsigned int j = 0;j<numpoints;j++) {
-            S[j].step(dt, DnVal[j], DchiVal[j], DcVal[j]);
+            S[j].stepEuler(dt, DnVal[j], DchiVal[j], DcVal[j]);
         }
 #ifdef COMPILE_PLOTTING
-        if((i % plotevery) == 0) {
+        if((i % numprint) == 0) {
             for (unsigned int j=0; j<numpoints;j++) {
                 if (M.innerRegion[j]) { //only display inner regions
                     vector<FLT> regionNN;
-                    regionNN = L.normalise(S[j].NN);
-                    VisualDataModel<FLT>* avm = (VisualDataModel<FLT>*)v3->getVisualModel (Cgrid[j]);
+                    regionNN = L.normalise(S[j].lapNN);
+                    VisualDataModel<FLT>* avm = (VisualDataModel<FLT>*)v3->getVisualModel (Egrid[j]);
                     avm->updateData (&regionNN);
-                    avm->clearAutoscaleColour();             if (saveplots) {
+                    avm->clearAutoscaleColour();
+                    regionNN = L.normalise(S[j].NN);
+                    VisualDataModel<FLT>* avm1 = (VisualDataModel<FLT>*)v3->getVisualModel (Fgrid[j]);
+                    avm1->updateData (&regionNN);
+                    avm1->clearAutoscaleColour();
+                    if (saveplots && (i % plotevery == 0)) {
                         if (vidframes) {
                             savePngs (logpath, "nn2", framecount, *v3);
                              ++framecount;
