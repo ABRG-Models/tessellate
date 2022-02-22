@@ -1,0 +1,15 @@
+import sys
+import time
+from math import *
+import numpy as np
+import os
+#first create the seed points of the tessellation
+command = "./build/setCentres 1.0 >output"
+os.system(command)
+#now move the seed points file to the logsMorph directory
+command = "cp centres.inp ./logsSch"
+os.system(command)
+#now run the main program
+command = "./build/schNakenberg schNakenberg.json >output"
+os.system(command)
+print("script finished")
