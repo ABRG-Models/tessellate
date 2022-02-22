@@ -1,6 +1,4 @@
 #include <morph/tools.h>
-#include <morph/Vector.h>
-#include <morph/vVector.h>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -139,62 +137,43 @@ public:
 	  return result;
     }
 
-/*
-        vector <FLT> normalise (vector <FLT> invector) {
-            vector <FLT> result;
-            unsigned int size = invector.size();
-            result.resize(size, 0);
-            FLT maxV = -1e7;
-            FLT minV = 1e7;
-            for (unsigned int i=0;i<size;i++) {
-                if (invector[i] > maxV) {maxV = invector[i];}
-                    if (invector[i] < minV) {minV = invector[i];}
-                }
-            FLT scaleV = 1./(maxV - minV);
-            for (unsigned int i=0;i<size;i++) {
-                result[i] = fmin(fmax((invector[i] - minV)*scaleV,0.),1.);
-            }
-            return result;
-        }
-*/
 
-    vector<FLT> getArg (vector<complex<FLT>> invVec) {
-        vector<FLT> result;
-        vector<complex<FLT>>::iterator p;
-        for (p = invVec.begin(); p<invVec.end(); p++) {
-            result.push_back(arg(*p));
-        }
-        return result;
-    }
+     vector<FLT> getArg (vector<complex<FLT>> invVec) {
+         vector<FLT> result;
+         vector<complex<FLT>>::iterator p;
+         for (p = invVec.begin(); p<invVec.end(); p++) {
+             result.push_back(arg(*p));
+         }
+         return result;
+     }
 
 
-    vector<FLT> getArgPrincipal (vector<complex<FLT>> invVec) {
-        vector<FLT> result;
-        vector<complex<FLT>>::iterator p;
-        for (p = invVec.begin(); p<invVec.end(); p++) {
-            FLT phase;
-            phase = arg(*p);
-            if (phase >= 0.0f) {
-                result.push_back(phase);
-            }
-            else {
-                phase += 2.0f*PI;
-                result.push_back(phase);
-            }
+     vector<FLT> getArgPrincipal (vector<complex<FLT>> invVec) {
+         vector<FLT> result;
+         vector<complex<FLT>>::iterator p;
+         for (p = invVec.begin(); p<invVec.end(); p++) {
+             FLT phase;
+             phase = arg(*p);
+             if (phase >= 0.0f) {
+                 result.push_back(phase);
+             }
+             else {
+                 phase += 2.0f*PI;
+                 result.push_back(phase);
+             }
 
-        }
-        return result;
-    }
+         }
+         return result;
+     }
 
-    vector<FLT> getAbs (vector<complex<FLT>> invVec) {
-        vector<FLT> result;
-        vector<complex<FLT>>::iterator p;
-        for (p = invVec.begin(); p<invVec.end(); p++) {
-            result.push_back(abs(*p));
-        }
-        return result;
-    }
-
+     vector<FLT> getAbs (vector<complex<FLT>> invVec) {
+         vector<FLT> result;
+         vector<complex<FLT>>::iterator p;
+         for (p = invVec.begin(); p<invVec.end(); p++) {
+             result.push_back(abs(*p));
+         }
+         return result;
+     }
 
 
 
@@ -372,6 +351,39 @@ public:
     return count;
   }
 
+    //find the Euclidean norm of a vector
+    FLT vectNorm(std::vector<FLT> invector)
+    {
+        FLT result = 0;
+        for (unsigned int i=0; i< invector.size(); i++) {
+            result += invector[i]*invector[i];
+        }
+        return sqrt(result);
+    }
+
+
+
+    //find the normed difference between two vectors
+    //TOFIX this assumes that the vectors are the same size, need error handling
+    FLT  normedDiff(vector<FLT> preField, vector<FLT> currField)
+    {
+        FLT result;
+        FLT diffField = 0;
+        unsigned int fieldSize = preField.size();
+        for (unsigned int i=0; i<fieldSize; i++) {
+            diffField += ((currField[i] - preField[i]) * (currField[i] - preField[i]));
+        }
+        FLT preNorm = this->vectNorm(preField);
+        FLT currNorm = this->vectNorm(currField);
+        if (preNorm * currNorm > 0.0) {
+            result = diffField / (currNorm * currNorm);
+            return result;
+        }
+        else {
+            result = 0;
+            return result;
+        }
+    }//end of method normedDiff
 
 
   //function bessel_ray for computing bessel functions along a ray

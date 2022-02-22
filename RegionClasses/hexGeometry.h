@@ -9,29 +9,24 @@
  * (maybe change to HexGrid later)
  */
 #include<chrono>
-using morph::HexGrid;
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <iomanip>
+#include <math.h>
+#include <random>
+#include <algorithm>
+#include <hdf5.h>
+#include <unistd.h>
+#include <bits/stdc++.h>
+#include <iostream>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <morph/HexGrid.h>
 using namespace std;
-using namespace morph;
 using namespace std::chrono;
 #define PI 3.1415926535897932
-
-#define NE(hi) (this->Hgrid->d_ne[hi])
-#define HAS_NE(hi) (this->Hgrid->d_ne[hi] == -1 ? false : true)
-
-#define NW(hi) (this->Hgrid->d_nw[hi])
-#define HAS_NW(hi) (this->Hgrid->d_nw[hi] == -1 ? false : true)
-
-#define NNE(hi) (this->Hgrid->d_nne[hi])
-#define HAS_NNE(hi) (this->Hgrid->d_nne[hi] == -1 ? false : true)
-
-#define NNW(hi) (this->Hgrid->d_nnw[hi])
-#define HAS_NNW(hi) (this->Hgrid->d_nnw[hi] == -1 ? false : true)
-
-#define NSE(hi) (this->Hgrid->d_nse[hi])
-#define HAS_NSE(hi) (this->Hgrid->d_nse[hi] == -1 ? false : true)
-
-#define NSW(hi) (this->Hgrid->d_nsw[hi])
-#define HAS_NSW(hi) (this->Hgrid->d_nsw[hi] == -1 ? false : true)
 
 class hexGeometry
 {
@@ -591,18 +586,19 @@ public:
         }
         return result;
     }
-    vector <morph::BezCurvePath<float>> eqTriangleMesh(float d, vector<pair<double,double>>&  baryPoints, vector<morph::BezCurve<float>>& outer, pair<float, float> centroid = std::make_pair(0.0,0.0)) {
+    vector <morph::BezCurvePath<float>> eqTriangleMesh(float d, vector<pair<double, double>>&  baryPoints, vector<morph::BezCurve<float>>& outer, vector<point>& vertexPoints,  pair<float, float> centroid ) {
         cout << "just entering eqTriangleMesh" << endl;
         vector <morph::BezCurvePath<float>> result;
         result.resize(6);
         vector<pair<float,float>> p;
-        pair<float,float> p0 = centroid;
-        p.resize(6, std::make_pair(0.0f,0.0f));
+        pair<float, float> p0 = centroid;
+        p.resize(6, std::make_pair(0.0,0.0));
         float pi6 = PI/6.0;
         for (int i=0; i<6; i++) {
            p[i] = std::make_pair(d * cos(pi6 + i * PI / 3.0), d * sin(pi6 + i * PI / 3.0));
            p[i].first = p[i].first + centroid.first;
            p[i].second =  p[i].second + centroid.second;
+           vertexPoints.push_back(pair2point(p[i]));
         }
         for (int i=0; i<6; i++) {
             morph::BezCurve<float> c0(p0, p[i]);
@@ -611,42 +607,172 @@ public:
             result[i].addCurve(c0);
             result[i].addCurve(c1);
             result[i].addCurve(c2);
-            double bp1 = (p0.first + p[i].first + p[(i+1)%6].first)/3.0;
-            double bp2 = (p0.second + p[i].second + p[(i+1)%6].second)/3.0;
+            float bp1 = (p0.first + p[i].first + p[(i+1)%6].first)/3.0;
+            float bp2 = (p0.second + p[i].second + p[(i+1)%6].second)/3.0;
             baryPoints.push_back(std::make_pair(bp1,bp2));
             outer.push_back(c1);
         }
         return result;
     }
 
-    vector<morph::BezCurvePath<float>> eqTriangleTess(double ds, vector<pair<double,double>>& centres, morph::BezCurvePath<float>& outerBound) {
+    vector<morph::BezCurvePath<float>> eqTriangleTess(float ds, vector<pair<double,double>>& centres, morph::BezCurvePath<float>& outerBound, vector<vector<point>>& vertices, vector<vector<int>>& neighbourRegions) {
+        neighbourRegions.resize(42);
         vector<morph::BezCurvePath<float>> result;
-        vector<pair<double,double>> baryPoints;
+        vector<pair<double, double>> baryPoints;
         vector<morph::BezCurve<float>> outer;
-        cout << "Just entering equTriangleTess" << endl;
+        vector<point> vertexPoints;
+        point centre;
+        vertexPoints.resize(0);
+        cout << "Just entering equTriangleTess vertices size " << vertices.size() <<endl;
         float pi3 = PI/3.0;
         float d = ds / sqrt(3.0);
         baryPoints.resize(0);
-        result = eqTriangleMesh(d,baryPoints,outer);
+        result = eqTriangleMesh(d,baryPoints,outer,vertexPoints, std::make_pair(0.0f, 0.0f));
         cout << "after eqTriangleMesh call 0 " << "baryPoints size " << baryPoints.size() << endl;
+        centre =  makePoint(0.0, 0.0);
         for (int k=0; k<6; k++) {
             centres.push_back(baryPoints[k]);
+            vertices[k].push_back(centre);
+            vertices[k].push_back(vertexPoints[k]);
+            vertices[k].push_back(vertexPoints[(k+1)%6]);
+            neighbourRegions[k].push_back((k+5)%6);
+            neighbourRegions[k].push_back((k+1)*6 + (k+3)%6);
+            neighbourRegions[k].push_back((k+1)%6);
         }
-        for (int i=0; i<6; i++) {
+        for (int i=1; i<7; i++) {
+            int idx = i*6;
+            vertexPoints.clear();
             baryPoints.resize(0);
             outer.resize(0);
             pair<float,float> offset = std::make_pair(ds*cos(i*pi3), ds*sin(i*pi3));
-            vector<morph::BezCurvePath<float>> basic = eqTriangleMesh(d, baryPoints, outer, offset);
+            vector<morph::BezCurvePath<float>> basic = eqTriangleMesh(d, baryPoints, outer, vertexPoints, offset);
             for (auto bp : basic) {
                 result.push_back(bp);
             }
             for (int j=i; j<i+3; j++) {
                 outerBound.addCurve(outer[(j+4)%6]);
             }
+            centre = pair2point(offset);
             for (int k=0; k<6; k++) {
                 centres.push_back(baryPoints[k]);
+                vertices[idx + k].push_back(centre);
+                vertices[idx + k].push_back(vertexPoints[k]);
+                vertices[idx + k].push_back(vertexPoints[(k+1)%6]);
             }
         }
+        neighbourRegions[6].push_back(-1);
+        neighbourRegions[6].push_back(7);
+        neighbourRegions[6].push_back(11);
+        neighbourRegions[7].push_back(-1);
+        neighbourRegions[7].push_back(8);
+        neighbourRegions[7].push_back(6);
+        neighbourRegions[8].push_back(7);
+        neighbourRegions[8].push_back(17);
+        neighbourRegions[8].push_back(9);
+        neighbourRegions[9].push_back(8);
+        neighbourRegions[9].push_back(0);
+        neighbourRegions[9].push_back(10);
+        neighbourRegions[10].push_back(11);
+        neighbourRegions[10].push_back(9);
+        neighbourRegions[10].push_back(37);
+        neighbourRegions[11].push_back(6);
+        neighbourRegions[11].push_back(10);
+        neighbourRegions[11].push_back(-1);
+
+        neighbourRegions[12].push_back(-1);
+        neighbourRegions[12].push_back(13);
+        neighbourRegions[12].push_back(17);
+        neighbourRegions[13].push_back(-1);
+        neighbourRegions[13].push_back(14);
+        neighbourRegions[13].push_back(12);
+        neighbourRegions[14].push_back(13);
+        neighbourRegions[14].push_back(-1);
+        neighbourRegions[14].push_back(15);
+        neighbourRegions[15].push_back(14);
+        neighbourRegions[15].push_back(18);
+        neighbourRegions[15].push_back(16);
+        neighbourRegions[16].push_back(17);
+        neighbourRegions[16].push_back(15);
+        neighbourRegions[16].push_back(1);
+        neighbourRegions[17].push_back(12);
+        neighbourRegions[17].push_back(16);
+        neighbourRegions[17].push_back(8);
+
+        neighbourRegions[18].push_back(15);
+        neighbourRegions[18].push_back(19);
+        neighbourRegions[18].push_back(23);
+        neighbourRegions[19].push_back(-1);
+        neighbourRegions[19].push_back(20);
+        neighbourRegions[19].push_back(18);
+        neighbourRegions[20].push_back(19);
+        neighbourRegions[20].push_back(-1);
+        neighbourRegions[20].push_back(21);
+        neighbourRegions[21].push_back(20);
+        neighbourRegions[21].push_back(-1);
+        neighbourRegions[21].push_back(22);
+        neighbourRegions[22].push_back(23);
+        neighbourRegions[22].push_back(21);
+        neighbourRegions[22].push_back(25);
+        neighbourRegions[23].push_back(18);
+        neighbourRegions[23].push_back(22);
+        neighbourRegions[23].push_back(2);
+
+        neighbourRegions[24].push_back(3);
+        neighbourRegions[24].push_back(25);
+        neighbourRegions[24].push_back(29);
+        neighbourRegions[25].push_back(22);
+        neighbourRegions[25].push_back(26);
+        neighbourRegions[25].push_back(24);
+        neighbourRegions[26].push_back(25);
+        neighbourRegions[26].push_back(-1);
+        neighbourRegions[26].push_back(27);
+        neighbourRegions[27].push_back(26);
+        neighbourRegions[27].push_back(-1);
+        neighbourRegions[27].push_back(28);
+        neighbourRegions[28].push_back(29);
+        neighbourRegions[28].push_back(27);
+        neighbourRegions[28].push_back(-1);
+        neighbourRegions[29].push_back(24);
+        neighbourRegions[29].push_back(28);
+        neighbourRegions[29].push_back(32);
+
+        neighbourRegions[30].push_back(39);
+        neighbourRegions[30].push_back(31);
+        neighbourRegions[30].push_back(35);
+        neighbourRegions[31].push_back(4);
+        neighbourRegions[31].push_back(32);
+        neighbourRegions[31].push_back(30);
+        neighbourRegions[32].push_back(31);
+        neighbourRegions[32].push_back(29);
+        neighbourRegions[32].push_back(33);
+        neighbourRegions[33].push_back(32);
+        neighbourRegions[33].push_back(-1);
+        neighbourRegions[33].push_back(34);
+        neighbourRegions[34].push_back(35);
+        neighbourRegions[34].push_back(33);
+        neighbourRegions[34].push_back(-1);
+        neighbourRegions[35].push_back(30);
+        neighbourRegions[35].push_back(34);
+        neighbourRegions[35].push_back(-1);
+
+        neighbourRegions[36].push_back(-1);
+        neighbourRegions[36].push_back(37);
+        neighbourRegions[36].push_back(41);
+        neighbourRegions[37].push_back(10);
+        neighbourRegions[37].push_back(38);
+        neighbourRegions[37].push_back(36);
+        neighbourRegions[38].push_back(37);
+        neighbourRegions[38].push_back(5);
+        neighbourRegions[38].push_back(39);
+        neighbourRegions[39].push_back(38);
+        neighbourRegions[39].push_back(30);
+        neighbourRegions[39].push_back(40);
+        neighbourRegions[40].push_back(41);
+        neighbourRegions[40].push_back(39);
+        neighbourRegions[40].push_back(-1);
+        neighbourRegions[41].push_back(36);
+        neighbourRegions[41].push_back(40);
+        neighbourRegions[41].push_back(-1);
         return result;
     }
 
@@ -751,8 +877,8 @@ public:
     vector<point> isosVertices( double ratio, const int rowX, const int rowY, double pRatio, bool lPerturb = false) {
         vector<point> result;
         result.resize(0);
-        double spaceX = 1.0 / (1.0 * (2 * rowX + 1));
-        double longSide = spaceX * ratio;
+        double longSide  = 1.0 / (1.0 * (2 * rowX + 1));
+        double spaceX = longSide * ratio;
         double spaceY = sqrt(longSide*longSide - spaceX*spaceX/4.0);
         unsigned int seed;
         chrono::milliseconds ms1 = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now().time_since_epoch());

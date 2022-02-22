@@ -1302,9 +1302,9 @@ FLT renewRegPerimeter (int regNum) {
       int result = 0;
       cout << " in printRegion " << regNum << endl;
         for (auto h : this->regionHex[regNum]) {
-        //    cout << h.vi<< " ";
+            cout << h.vi<< " ";
             result++;
-            }
+        }
         return result;
     }
 //function to return fraction of area with nn positive
