@@ -1,0 +1,10 @@
+ centres[0].first = -0.325281 ;  centres[0].second = 0.75815 ; 
+ centres[1].first = -0.271875 ;  centres[1].second = 0.369366 ; 
+ centres[2].first = -0.161837 ;  centres[2].second = 0.744468 ; 
+ centres[3].first = -0.0997413 ;  centres[3].second = 0.0108564 ; 
+ centres[4].first = -0.00473933 ;  centres[4].second = -0.156228 ; 
+ centres[5].first = 0.0489363 ;  centres[5].second = 0.828268 ; 
+ centres[6].first = 0.22393 ;  centres[6].second = -0.32198 ; 
+ centres[7].first = 0.590306 ;  centres[7].second = 0.154549 ; 
+ centres[8].first = 0.776669 ;  centres[8].second = -0.593292 ; 
+ centres[9].first = 0.843412 ;  centres[9].second = -0.16082 ; 
