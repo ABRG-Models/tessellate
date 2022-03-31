@@ -1,6 +1,7 @@
 #include <morph/tools.h>
 #include <morph/Vector.h>
 #include <morph/vVector.h>
+#include "opencv2/opencv.hpp"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -15,6 +16,15 @@
 #include <iostream>
 #include <sys/stat.h>
 #include <sys/types.h>
+#ifndef GENERAL
+#include "topo/general.h"
+#define GENERAL
+#endif
+#ifndef TOPO
+#include "topo/topo.h"
+#define TOPO
+#endif
+#include <morph/ShapeAnalysis.h>
 // #include <boost/math/special_functions/bessel.hpp>
 
 using std::vector;
@@ -33,33 +43,43 @@ using namespace std;
 // to find the maximum value of a vector
 class Analysis {
 //global class variables
-public:
-  struct extremum {
-  int radialIndex;
-  FLT radialValue;
-  };
-  vector<extremum> turnVal; //radial turning points
+    public:
+    struct extremum {
+        int radialIndex;
+        FLT radialValue;
+    };
+    vector<extremum> turnVal; //radial turning points
+    vector<FLT> binVals,histogram;
+    int nBins, gaussBlur;
+    CartHexSampler<FLT> CHM;
+    FLT ROIwid, ROIpinwheelCount, patternFrequency, columnSpacing;
 
-  //default constructor
+    //default constructor
+    Analysis () {};
 
-  Analysis () {};
+    //constructor for Fourier analysis
+    Analysis (int nBins, int gaussBlur, FLT ROIwid) {
+        this->nBins = nBins;
+        this->gaussBlur = gaussBlur;
+        this->ROIwid = ROIwid;
+    };
 
     FLT maxVal( vector<FLT> invector) {
-            FLT result = -1.0e7;
-            for (unsigned int i = 0; i < invector.size(); i++) {
-                    if (invector[i] > result)
-                            result = invector[i];
-            }
-            return result;
+        FLT result = -1.0e7;
+        for (unsigned int i = 0; i < invector.size(); i++) {
+            if (invector[i] > result)
+                result = invector[i];
+        }
+        return result;
     }
 
 
     // to find the minimum value of a vector
     FLT minVal( vector<FLT> invector) {
-            FLT result = 1.0e7;
-            for (unsigned int i = 0; i < invector.size(); i++) {
-                    if (invector[i] < result)
-                            result = invector[i];
+        FLT result = 1.0e7;
+        for (unsigned int i = 0; i < invector.size(); i++) {
+            if (invector[i] < result)
+                result = invector[i];
             }
             return result;
     }
@@ -375,6 +395,97 @@ public:
     return count;
   }
 
+    //counts true vals in bool array
+    int countBool(std::vector<bool> inVect) {
+        int count = 0;
+        for (unsigned int i=0; i<inVect.size(); i++) {
+            if (inVect[i]) count++;
+            return count;
+        }
+    }
+
+
+    //Convert a vect to cv::Mat
+    cv::Mat vect2mat(std::vector<FLT> A, int nx, int ny) {
+
+        CHM.C.nx = nx;
+        CHM.C.ny = ny;
+        int n = nx*ny;
+        FLT maxV = -1e9;
+        FLT minV = +1e9;
+        for(int i=0; i<n; i++){
+            if(maxV<fabs(A[i])){
+                maxV = fabs(A[i]);
+            } // THIS WAY ENSURE THAT ZERO DIFF ALWAYS MAPS TO VAL OF 0.5
+            if(minV>A[i]){ minV = A[i]; }
+        }
+        FLT scale = 1./(2*maxV);
+
+        cv::Mat I = cv::Mat::zeros(nx,ny,CV_32F);
+        int k=0;
+        for(int i=0;i<nx;i++){
+            for(int j=ny; j-->0;){ // invert y axis of image
+                I.at<float>(j,i) = (A[k]+maxV)*scale;
+                k++;
+            }
+        }
+        return I;
+    }
+
+    std::vector<FLT> getPatternFrequency(cv::Mat I, bool showfft){
+
+        // ANALYSIS STEP 5. ESTIMATE ISO-ORIENTATION COLUMN SPACING
+        int sampleRange = 1;
+        int polyOrder = 4;
+        binVals.resize(nBins,0.);
+        histogram.resize(nBins,0.);
+
+        // Get frequency histogram from image
+        //cv::Mat I1 = CHM.getDifferenceImage(orResponseSampled[0],orResponseSampled[2]);
+        std::vector<std::vector<FLT> > h1 = CHM.fft(I, nBins, gaussBlur, showfft);
+
+        // sample portion of histogram to fit
+        int nsamp = nBins*sampleRange;
+        arma::vec xs(nsamp);
+        arma::vec ys(nsamp);
+        for(int i=0;i<nsamp;i++){
+            xs[i] = binVals[i];
+            ys[i] = histogram[i];
+        }
+
+        // do polynomial fit
+        arma::vec cf = arma::polyfit(xs,ys,polyOrder);
+
+        // make a high-resolution model for the data
+        int fitres = 1000;
+        arma::vec xfit(fitres);
+        for(int i=0;i<fitres;i++){
+            xfit[i] = binVals[nsamp-1]*(FLT)i/((FLT)fitres-1);
+        }
+        arma::vec yfit = arma::polyval(cf,xfit);
+
+        // get frequency at which high-res model peaks
+        FLT maxVal = -1e9;
+        FLT maxX = 0;
+        for(int i=0;i<fitres;i++){
+            if(yfit[i]>maxVal){
+                maxVal = yfit[i];
+                maxX = xfit[i];
+            }
+        }
+
+        this->patternFrequency = maxX; // units are cycles / ROI-width
+        this->columnSpacing = ROIwid / patternFrequency;  // spacing between iso-orientation columns in units of cortex sheet, e.g., to plot scale bar on maps
+
+        // return coeffs in standard vector
+        std::vector<FLT> coeffs(cf.size());
+        for(int i=0;i<cf.size();i++){
+            coeffs[i] = (FLT)cf[i];
+        }
+
+        return coeffs;
+
+    }
 
 
   //function bessel_ray for computing bessel functions along a ray

@@ -99,7 +99,13 @@ int main (int argc, char **argv)
 
 
 // include the analysis methods
-    Analysis L;
+    int nbins = 50;
+    int nx = 100;
+    int ny = 100;
+    int gaussBlur = -1;
+    FLT radius = 1.016;
+    FLT ROIwid =  0.7f*radius;
+    Analysis L(nbins, gaussBlur, ROIwid);
 
     cout<< "just before first data read"<< " Lcontinue " << Lcontinue <<endl;
     unsigned int seed = time(NULL);
@@ -153,7 +159,6 @@ int main (int argc, char **argv)
 // section for solving on the circle Tessllation
     cout << "just before creating circle Tessellation Solver S" << endl;
     //Readjust Dn for a single region
-    FLT radius = 1.016;
     pair<FLT,FLT> centroid(0.0,0.0);
 
 // section for solving on the circle Tessllation
@@ -193,7 +198,15 @@ int main (int argc, char **argv)
     }
     */
 
+    vector<FLT> psiphase;
+    vector <FLT> psir;
+    vector <FLT> phir;
+    vector <FLT> phiphase;
 
+    psiphase = L.getArgPrincipal(S.psi);
+    psir = L.getAbs(S.psi);
+    phir = L.getAbs(S.phi);
+    phiphase = L.getArgPrincipal(S.phi);
 #ifdef COMPILE_PLOTTING
     // Spatial offset, for positioning of HexGridVisuals
     morph::Vector<float> spatOff;
@@ -210,8 +223,6 @@ int main (int argc, char **argv)
     morph::Scale<FLT,float> zscale; zscale.setParams (0.0f, 0.0f);
     // The second is the colour scaling. Set this to autoscale.
     morph::Scale<FLT,float> cscale; cscale.do_autoscale = true;
-    vector<FLT> psiphase;
-    psiphase = L.getArgPrincipal(S.psi);
     morph::HexGridVisual<FLT>* hgv1 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
     hgv1->setScalarData (&psiphase);
     // Z position scaling - how hilly/bumpy the visual will be.
@@ -228,8 +239,6 @@ int main (int argc, char **argv)
     // move back a whole hexGrid width
     xzero += S.Hgrid->width();
     spatOff = { xzero, yzero, 0.0 };
-    vector <FLT> psir;
-    psir = L.getAbs(S.psi);
     morph::HexGridVisual<FLT>* hgv2 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
     hgv2->setScalarData (&psir);
     // Z position scaling - how hilly/bumpy the visual will be.
@@ -249,8 +258,6 @@ int main (int argc, char **argv)
     // move down a whole hexGrid width
     yzero -= S.Hgrid->width();
     spatOff = { xzero, yzero, 0.0 };
-    vector <FLT> phir;
-    phir = L.getAbs(S.phi);
     morph::HexGridVisual<FLT>* hgv3 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
     hgv3->setScalarData (&phir);
     // Z position scaling - how hilly/bumpy the visual will be.
@@ -267,8 +274,6 @@ int main (int argc, char **argv)
     // move back a whole hexGrid width
     xzero -= S.Hgrid->width();
     spatOff = { xzero, yzero, 0.0 };
-    vector <FLT> phiphase;
-    phiphase = L.getArgPrincipal(S.phi);
     morph::HexGridVisual<FLT>* hgv4 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
     hgv4->setScalarData (&phiphase);
     // Z position scaling - how hilly/bumpy the visual will be.
@@ -290,29 +295,57 @@ int main (int argc, char **argv)
     S.setNonLocalC();
     std::cout << "after setting NonLocalC" << std::endl;
     oldPsi = S.psi;
+    vector<bool> isPinWheel;
+    int pinCount = 0;
+    FLT pinDensity = 0.0;
     for (int i=0;i<numsteps;i++) {
         std::cerr << "step " << i << std::endl;
         S.step(dt, epsilon, g, oldPsi);
         std::cerr << "step " << i << std::endl;
         oldPsi = S.psi;
+        FLT psiMax = 0.0;
+        FLT psiMin = 0.0;
+        FLT phiMax = 0.0;
+        FLT phiMin = 0.0;
         if ((i % nonLocal == 0) && i>0) {
             S.setNonLocalR();
             S.setNonLocalC();
-        }
-#ifdef COMPILE_PLOTTING
-        if ((i % numprint) == 0) {
-            //vector<FLT> normalpsi;
-	    //normalpsi.resize(S.n);
+            isPinWheel.resize(0);
+            bool showfft = true;
             psiphase = L.getArgPrincipal(S.psi);
-            //vector<FLT> normalr;
-	    //normalr.resize(S.n);
             psir = L.getAbs(S.psi);
             phiphase = L.getArgPrincipal(S.phi);
             phir = L.getAbs(S.phi);
-            FLT psiMax = L.maxVal(psir);
-            FLT psiMin = L.minVal(psir);
-            FLT phiMax = L.maxVal(phir);
-            FLT phiMin = L.minVal(phir);
+            psiMax = L.maxVal(psir);
+            psiMin = L.minVal(psir);
+            phiMax = L.maxVal(phir);
+            phiMin = L.minVal(phir);
+            cv::Mat I = L.vect2mat(psiphase, nx, ny);
+            L.getPatternFrequency(I, showfft);
+            FLT low = 0.1*(psiMax-psiMin) + psiMin;
+            cout << " just before isPinWheel psi complexZero" << endl;
+            isPinWheel = S.complexZero(L.getAbs(S.psi),low);
+            pinCount = L.countBool(isPinWheel);
+            std::cout << " pinwheel count via bools " << pinCount << std::endl;
+            cout << " just after is Pinwheel psi complexZero" << endl;
+            cout << " just before isPinWheel phi complexZero" << endl;
+            isPinWheel.resize(0);
+            low = 0.1*(phiMax-psiMin) + phiMin;
+            isPinWheel = S.complexZero(L.getAbs(S.phi), low);
+            cout << " just after is Pinwheel phi complexZero" << endl;
+            pinDensity = pinCount/(L.columnSpacing*L.columnSpacing);
+            cout<<"pattern frequency " << L.patternFrequency << "  columnSpacing " << L.columnSpacing << " pinWheel density " << pinDensity << std::endl;
+        }
+#ifdef COMPILE_PLOTTING
+        if ((i % numprint) == 0) {
+            psiphase = L.getArgPrincipal(S.psi);
+            psir = L.getAbs(S.psi);
+            phiphase = L.getArgPrincipal(S.phi);
+            phir = L.getAbs(S.phi);
+            psiMax = L.maxVal(psir);
+            psiMin = L.minVal(psir);
+            phiMax = L.maxVal(phir);
+            phiMin = L.minVal(phir);
             cerr << "max arg of normalpsi  " << L.maxVal(psiphase) << " min arg of normalpsi " << L.minVal(psiphase) <<  " iteration " << i <<endl;
             cout << "max arg of normalpsi  " << L.maxVal(psiphase) << " min arg of normalpsi " << L.minVal(psiphase) <<  " iteration " << i <<endl;
             cerr << "max val of abs(psi)  " << psiMax << " min val of abs(psi) " << psiMin <<  " iteration " << i <<endl;
@@ -338,17 +371,7 @@ int main (int argc, char **argv)
                     savePngs (logpath, "psi", i , v1);
                 }
             }
-            vector<bool> isPinWheel;
-            isPinWheel.resize(0);
-            FLT low = 0.1*(psiMax-psiMin) + psiMin;
-            cout << " just before isPinWheel psi complexZero" << endl;
-            isPinWheel = S.complexZero(L.getAbs(S.psi),low);
-            cout << " just after is Pinwheel psi complexZero" << endl;
-            cout << " just before isPinWheel phi complexZero" << endl;
-            isPinWheel.resize(0);
-            low = 0.1*(phiMax-psiMin) + phiMin;
-            isPinWheel = S.complexZero(L.getAbs(S.phi), low);
-            cout << " just after is Pinwheel phi complexZero" << endl;
+
         } // end of print on numprin     disp.closeDisplay();
         // rendering the graphics. After each simulation step, check if enough time
         // has elapsed for it to be necessary to call v1.render().
@@ -363,7 +386,7 @@ int main (int argc, char **argv)
 //cout << " just after time step i = " << i << endl;
 
 //code run at end of timestepping
-/*first save the  ofstream outFile;
+//first save the  ofstream outFile;
     string fname = logpath + "/first.h5";
     morph::HdfData data(fname);
     data.add_contained_vals("c",S.phi); //Laplacian of psi
@@ -371,7 +394,7 @@ int main (int argc, char **argv)
     data.add_val ("/g", g); //g parameter
     data.add_val ("/epsilon", epsilon); //epsilon paramater
     cout << " just after writing data "  << endl;
-*/
+//
 #ifdef COMPILE_PLOTTING
     cout << "Ctrl-c or press x in graphics window to exit.\n";
     v1.keepOpen();
