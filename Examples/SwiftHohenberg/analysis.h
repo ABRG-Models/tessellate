@@ -400,8 +400,8 @@ class Analysis {
         int count = 0;
         for (unsigned int i=0; i<inVect.size(); i++) {
             if (inVect[i]) count++;
-            return count;
         }
+        return count;
     }
 
 
