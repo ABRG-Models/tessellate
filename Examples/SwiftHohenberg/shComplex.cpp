@@ -4,13 +4,14 @@
  * that I can compile a version of the binary without plotting, for parameter searches
  * in which I am only going to be saving out HDF5 data.
  */
-#include "region.h"
+#ifdef COMPILE_PLOTTING
 #include <morph/Visual.h>
 #include <morph/HexGridVisual.h>
 #include <morph/ColourMap.h>
 #include <morph/VisualDataModel.h>
 #include <morph/GraphVisual.h>
 #include <morph/Scale.h>
+#endif
 #include <morph/Vector.h>
 #include "shPSolver.h"
 #include "analysis.h"
@@ -24,6 +25,7 @@
 #include <chrono>
 #include <complex>
 
+#ifdef COMPILE_PLOTTING
 //! Helper function to save PNG images with a suitable name
 void savePngs (const std::string& logpath, const std::string& name,
                unsigned int frameN, morph::Visual& v)
@@ -34,6 +36,7 @@ void savePngs (const std::string& logpath, const std::string& name,
     ff1 << ".png";
     v.saveImage (ff1.str());
 }
+#endif
 using std::array;
 using std::string;
 using std::stringstream;
@@ -100,8 +103,6 @@ int main (int argc, char **argv)
 
 // include the analysis methods
     int nbins = 50;
-    int nx = 100;
-    int ny = 100;
     int gaussBlur = -1;
     FLT radius = 1.016;
     FLT ROIwid =  0.7f*radius;
@@ -156,18 +157,23 @@ int main (int argc, char **argv)
     steady_clock::time_point lastrender = steady_clock::now();
 
 #endif
+    FLT lengthScale = 29.0f;
 // section for solving on the circle Tessllation
-    cout << "just before creating circle Tessellation Solver S" << endl;
+    cout << "just before creating  Solver S" << endl;
     //Readjust Dn for a single region
     pair<FLT,FLT> centroid(0.0,0.0);
 
-// section for solving on the circle Tessllation
+/* section for solving on the circle Tessllation
 // if (skipMorph) return 0;
     cout << "just before creating shCSolver" <<endl;
-    FLT lengthScale = 29.0f;
     shSolver S(scale, xspan, logpath, radius, centroid, lengthScale);
-//    float xwidth = 2.0f;
-//    float ywidth = 2.0f;
+*/
+//section for rectangular grid
+    float xwidth = 2.0f;
+    float ywidth = 2.0f;
+    shSolver S(scale, xspan, logpath, xwidth, ywidth , lengthScale);
+    int nx = std::floor(xwidth/S.ds);
+    int ny = std::floor(ywidth/S.ds);
 // Constructor for parallelogram domain
 //    shSolver S(scale,  xspan, logpath);
     cout << "just after creating shCSolver" <<endl;
@@ -176,14 +182,25 @@ int main (int argc, char **argv)
 //    cout << "just after creating shCSolver" <<endl;
     //S.setNoFlux();
     cout << "just after setHexType()" << endl;
-    //random i.c.s
-    for (auto &h : S.Hgrid->hexen) {
-        FLT choice = ruf.get();
-        S.psi[h.vi] = std::polar (1.0f, - choice * 2.0f * 3.1415927f);
-        FLT choice1 = ruf.get();
-        choice1 = ruf.get();
-        S.phi[h.vi] = std::polar (1.0f, - choice1 * 2.0f * 3.1415927f);
+
+    string fname = logpath + "/first.h5";
+//Now set i.c.s
+    if (Lcontinue) {
+        morph::HdfData data(fname);
+        data.read_contained_vals("c",S.phi); //Laplacian of psi
+        data.read_contained_vals("n",S.psi); //main variable
     }
+    else {
+    //random i.c.s
+        for (auto &h : S.Hgrid->hexen) {
+            FLT choice = ruf.get();
+            S.psi[h.vi] = std::polar (1.0f, - choice * 2.0f * 3.1415927f);
+            FLT choice1 = ruf.get();
+            choice1 = ruf.get();
+            S.phi[h.vi] = std::polar (1.0f, - choice1 * 2.0f * 3.1415927f);
+        }
+    }
+    std::cout << "after setting ics" << std::endl;
     //
     /*set up sinusoidal initial conditions
     int di = 0;
@@ -207,6 +224,7 @@ int main (int argc, char **argv)
     psir = L.getAbs(S.psi);
     phir = L.getAbs(S.phi);
     phiphase = L.getArgPrincipal(S.phi);
+    std::cout << " just before setting graphics" << std::endl;
 #ifdef COMPILE_PLOTTING
     // Spatial offset, for positioning of HexGridVisuals
     morph::Vector<float> spatOff;
@@ -308,8 +326,8 @@ int main (int argc, char **argv)
         FLT phiMax = 0.0;
         FLT phiMin = 0.0;
         if ((i % nonLocal == 0) && i>0) {
-            S.setNonLocalR();
-            S.setNonLocalC();
+      //      S.setNonLocalR();
+      //      S.setNonLocalC();
             isPinWheel.resize(0);
             bool showfft = true;
             psiphase = L.getArgPrincipal(S.psi);
@@ -321,7 +339,7 @@ int main (int argc, char **argv)
             phiMax = L.maxVal(phir);
             phiMin = L.minVal(phir);
             cv::Mat I = L.vect2mat(psiphase, nx, ny);
-            L.getPatternFrequency(I, showfft);
+            //L.getPatternFrequency(I, showfft);
             FLT low = 0.1*(psiMax-psiMin) + psiMin;
             cout << " just before isPinWheel psi complexZero" << endl;
             isPinWheel = S.complexZero(L.getAbs(S.psi),low);
@@ -333,8 +351,8 @@ int main (int argc, char **argv)
             low = 0.1*(phiMax-psiMin) + phiMin;
             isPinWheel = S.complexZero(L.getAbs(S.phi), low);
             cout << " just after is Pinwheel phi complexZero" << endl;
-            pinDensity = pinCount/(L.columnSpacing*L.columnSpacing);
-            cout<<"pattern frequency " << L.patternFrequency << "  columnSpacing " << L.columnSpacing << " pinWheel density " << pinDensity << std::endl;
+            //pinDensity = pinCount/(L.columnSpacing*L.columnSpacing);
+            //cout<<"pattern frequency " << L.patternFrequency << "  columnSpacing " << L.columnSpacing << " pinWheel density " << pinDensity << std::endl;
         }
 #ifdef COMPILE_PLOTTING
         if ((i % numprint) == 0) {
@@ -386,8 +404,8 @@ int main (int argc, char **argv)
 //cout << " just after time step i = " << i << endl;
 
 //code run at end of timestepping
+/*
 //first save the  ofstream outFile;
-    string fname = logpath + "/first.h5";
     morph::HdfData data(fname);
     data.add_contained_vals("c",S.phi); //Laplacian of psi
     data.add_contained_vals("n",S.psi); //main variable
@@ -395,6 +413,7 @@ int main (int argc, char **argv)
     data.add_val ("/epsilon", epsilon); //epsilon paramater
     cout << " just after writing data "  << endl;
 //
+*/
 #ifdef COMPILE_PLOTTING
     cout << "Ctrl-c or press x in graphics window to exit.\n";
     v1.keepOpen();
