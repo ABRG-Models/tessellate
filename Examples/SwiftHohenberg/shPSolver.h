@@ -255,19 +255,29 @@ public:
         this->ds = 1.0/s;
         this->overds = 1.0/(this->lengthScale*this->lengthScale*ds*ds);
         Hgrid = new HexGrid(this->ds, this->xspan, 0.0, morph::HexDomainShape::Rectangle);
-        this->n = Hgrid->num();
         afile << "after setting rectangle boundary " << endl;
         Hgrid->setRectangularBoundary(x, y);
         afile << "after setting rectangle boundary " << endl;
         Hgrid->populate_d_neighbours();
+        this->n = Hgrid->num();
+        N.resize(n);
         afile << "after populating d_neighbours " << endl;
-        afile << "before filling H " << n << endl;
         afile << "after creating HexGrid ds =  " << this->ds << endl;
         afile << " max x " << Hgrid->getXmax(0.0) << " min x " << Hgrid->getXmin(0.0) << endl;
-        this->psi.resize(n);
+        this->setNoFlux();
+        afile << "before psi.resize()" << endl;
+        this->psi.resize(n);;
+        this->phi.resize(n);;
         afile << "after psi.resize()" << endl;
-        this->phi.resize(n);
-        afile << "after psi.resize()" << endl;
+        this->nonLocalR.resize(this->n, 0.0);
+        this->nonLocalC.resize(this->n, 0.0);
+        //now set up kernel
+        this->sigma = this->xspan / 37.5;
+        this->gNorm = 1.0 /(2.0*PI*sigma*sigma);
+        this->kernel = new morph::HexGrid(this->ds, 10.0*sigma, 0, morph::HexDomainShape::Boundary);
+        this->kernel->setCircularBoundary(3.0*sigma);
+        this->kernelRdata.resize(this->kernel->num(),0.0);
+        this->kernelCdata.resize(this->kernel->num());
         cout << " end of shSolver bezCurvePath " << endl;
 
     }; // end of shSolver constructor
