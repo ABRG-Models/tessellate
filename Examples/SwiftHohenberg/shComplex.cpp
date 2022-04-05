@@ -317,17 +317,17 @@ int main (int argc, char **argv)
     int pinCount = 0;
     FLT pinDensity = 0.0;
     for (int i=0;i<numsteps;i++) {
-        std::cerr << "step " << i << std::endl;
+        //std::cerr << "step " << i << std::endl;
         S.step(dt, epsilon, g, oldPsi);
-        std::cerr << "step " << i << std::endl;
+        //std::cerr << "step " << i << std::endl;
         oldPsi = S.psi;
         FLT psiMax = 0.0;
         FLT psiMin = 0.0;
         FLT phiMax = 0.0;
         FLT phiMin = 0.0;
         if ((i % nonLocal == 0) && i>0) {
-      //      S.setNonLocalR();
-      //      S.setNonLocalC();
+            S.setNonLocalR();
+            S.setNonLocalC();
             isPinWheel.resize(0);
             bool showfft = true;
             psiphase = L.getArgPrincipal(S.psi);
@@ -339,7 +339,7 @@ int main (int argc, char **argv)
             phiMax = L.maxVal(phir);
             phiMin = L.minVal(phir);
             cv::Mat I = L.vect2mat(psiphase, nx, ny);
-            //L.getPatternFrequency(I, showfft);
+            L.getPatternFrequency(I, showfft);
             FLT low = 0.1*(psiMax-psiMin) + psiMin;
             cout << " just before isPinWheel psi complexZero" << endl;
             isPinWheel = S.complexZero(L.getAbs(S.psi),low);
@@ -351,8 +351,8 @@ int main (int argc, char **argv)
             low = 0.1*(phiMax-psiMin) + phiMin;
             isPinWheel = S.complexZero(L.getAbs(S.phi), low);
             cout << " just after is Pinwheel phi complexZero" << endl;
-            //pinDensity = pinCount/(L.columnSpacing*L.columnSpacing);
-            //cout<<"pattern frequency " << L.patternFrequency << "  columnSpacing " << L.columnSpacing << " pinWheel density " << pinDensity << std::endl;
+            pinDensity = pinCount/(L.columnSpacing*L.columnSpacing);
+            cout<<"pattern frequency " << L.patternFrequency << "  columnSpacing " << L.columnSpacing << " pinWheel density " << pinDensity << std::endl;
         }
 #ifdef COMPILE_PLOTTING
         if ((i % numprint) == 0) {
