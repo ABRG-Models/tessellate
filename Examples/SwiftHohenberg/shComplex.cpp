@@ -61,9 +61,11 @@ int main (int argc, char **argv)
     if (!conf.ready) {
         cerr << "Error setting up JSON config: " << conf.emsg << endl;
     }
+    std::cerr << "after reading json file " << std::endl;
  #ifdef SINGLE
         float dt = conf.getFloat("dt",0.0001);
-        float epsilon = conf.getFloat("epsilon",5.0);
+        float epsilon = conf.getFloat("epsilon",0.1);
+        float k0 = conf.getFloat("k0",10.0);
         float  g = conf.getFloat("g",5.0);
         float  xspan = conf.getFloat("xspan",5.0);
         float  boundaryFalloffDist = conf.getFloat("boundaryFalloffDist",0.0078);
@@ -75,7 +77,8 @@ int main (int argc, char **argv)
         float  wratio = conf.getFloat("wratio", 0.844f);
 #else
         double dt = conf.getDouble("dt",0.0001);
-        double epsilon = conf.getDouble("epsilon",5.0);
+        double epsilon = conf.getDouble("epsilon",0.1);
+        double k0 = conf.getDouble("k0",10.0);
         double g = conf.getDouble("g",5.0);
         double xspan = conf.getDouble("xspan",5.0);
         double boundaryFalloffDist = conf.getDouble("boundaryFalloffDist",0.0078);
@@ -100,12 +103,12 @@ int main (int argc, char **argv)
     bool LfixedSeed = conf.getBool("LfixedSeed",false);
     bool overwrite_logs = conf.getBool("overwrite_logs",1);
 
-
+    std::cerr << "after reading the json values " << std::endl;
 // include the analysis methods
-    int nbins = 50;
-    int gaussBlur = -1;
+    int nbins = 100;
+    int gaussBlur = 1;
     FLT radius = 1.016;
-    FLT ROIwid =  0.7f*radius;
+    FLT ROIwid =  2.0;
     Analysis L(nbins, gaussBlur, ROIwid);
 
     cout<< "just before first data read"<< " Lcontinue " << Lcontinue <<endl;
@@ -172,8 +175,15 @@ int main (int argc, char **argv)
     float xwidth = 2.0f;
     float ywidth = 2.0f;
     shSolver S(scale, xspan, logpath, xwidth, ywidth , lengthScale);
-    int nx = std::floor(xwidth/S.ds);
     int ny = std::floor(ywidth/S.ds);
+    int nx = S.n / ny;
+    std::cout << "nx " << nx << " ny " << ny << std::endl;
+    if (nx*ny != S.n) {
+        std::cerr << "error nx*ny " << nx*ny << " S.n " << S.n << std::endl;
+        //return -1;
+    }
+
+
 // Constructor for parallelogram domain
 //    shSolver S(scale,  xspan, logpath);
     cout << "just after creating shCSolver" <<endl;
@@ -191,6 +201,7 @@ int main (int argc, char **argv)
         data.read_contained_vals("n",S.psi); //main variable
     }
     else {
+    //
     //random i.c.s
         for (auto &h : S.Hgrid->hexen) {
             FLT choice = ruf.get();
@@ -202,7 +213,8 @@ int main (int argc, char **argv)
     }
     std::cout << "after setting ics" << std::endl;
     //
-    /*set up sinusoidal initial conditions
+    /*set up sinusoidal initial conditions parallelogram
+
     int di = 0;
     for (int i = 0; i<S.Hgrid->d_numrows; i++) {
         FLT eta = i * 8.0 * PI/(S.Hgrid->d_numrows);
@@ -214,7 +226,25 @@ int main (int argc, char **argv)
         }
     }
     */
-
+    /*
+    //set up sinusoidal initial conditions rectangle
+        int di = 0;
+        int tcount = 0;
+        for (int i = 0; i<nx; i++) {
+            FLT eta = i * 2.0 * PI/(nx * 1.0);
+            std::cout << "eta = " << eta << std::endl;
+            for (int j=0; j<ny; j++) {
+                FLT theta = j * 2.0 * PI/(ny * 1.0);
+                //std::cout << "eta = " << eta << std::endl;
+                di = i * nx + j;
+                tcount++;
+                S.psi[di] = std::polar (1.0f, - cos(eta) * sin(theta));
+                S.phi[di] = std::polar (1.0f, - cos(eta) * sin(theta));
+            }
+        }
+        std::cout << "number of hexes given psi values " << tcount << std::endl;
+    }
+    */
     vector<FLT> psiphase;
     vector <FLT> psir;
     vector <FLT> phir;
@@ -290,6 +320,7 @@ int main (int argc, char **argv)
 
     // A. Offset in x direction left.
     // move back a whole hexGrid width
+    /*
     xzero -= S.Hgrid->width();
     spatOff = { xzero, yzero, 0.0 };
     morph::HexGridVisual<FLT>* hgv4 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
@@ -303,11 +334,57 @@ int main (int argc, char **argv)
     hgv4->addLabel ("Phi phase", {-0.05f, txtoff, 0.0f}, morph::colour::black, morph::VisualFont::VeraSerif, 0.05, 56);
     hgv4->finalize();
     v1.addVisualModel (hgv4);
+    */
 
+
+    // Graph of frequency estimate
+    std::vector<float> graphX(1,0);
+    std::vector<float> graphY(1,0);
+    std::vector<float> graphX2(1,0);
+    std::vector<float> graphY2(1,0);
+    std::vector<float> graphX3(2,0);
+    std::vector<float> graphY3(2,0);
+    graphY3[1] = 1.0;
+    int sampwid = 150;
+    float wid = 1.5;
+    float hei = 1.5;
+    FLT grid2offx = xzero-1.5*S.Hgrid->width();
+    morph::GraphVisual<float>* gvPinDensity = new morph::GraphVisual<float> (v1.shaderprog, v1.tshaderprog, morph::Vector<float>{grid2offx,-S.Hgrid->width()*0.7,0.0f});
+    morph::DatasetStyle ds;
+    ds.linewidth = 0.00;
+    ds.linecolour = {0.0, 0.0, 0.0};
+    ds.markerstyle = morph::markerstyle::circle;
+    ds.markersize = 0.02;
+    ds.markercolour = {0.0, 0.0, 0.0};
+    ds.markergap = 0.0;
+    gvPinDensity->xlabel="frequency (cycles/ROI-width)";
+    gvPinDensity->ylabel="FFT magnitude";
+    gvPinDensity->setsize(wid,hei);
+    gvPinDensity->setlimits (0,(float)sampwid*0.5,0,1.0); // plot up to nyquist (pixels / 2)
+    gvPinDensity->setdata (graphX, graphY, ds);
+    morph::DatasetStyle ds2;
+    ds2.markerstyle = morph::markerstyle::circle;
+    ds2.markersize = 0.0;
+    ds2.markercolour = {0.0, 0.0, 0.0};
+    ds2.markergap = 0.0;
+    ds2.linewidth = 0.01;
+    ds2.linecolour = {1.0, 0.0, 0.0};
+    gvPinDensity->setdata (graphX2, graphY2, ds2);
+    morph::DatasetStyle ds3;
+    ds3.markerstyle = morph::markerstyle::circle;
+    ds3.markersize = 0.0;
+    ds3.markercolour = {0.0, 0.0, 0.0};
+    ds3.markergap = 0.0;
+    ds3.linewidth = 0.01;
+    ds3.linecolour = {0.0, 0.0, 1.0};
+    gvPinDensity->setdata (graphX3, graphY3, ds3);
+    gvPinDensity->finalize();
+    v1.addVisualModel (static_cast<morph::VisualModel*>(gvPinDensity));
 #endif
     std::cout << "after setting up graphics" << std::endl;
     vector<complex<FLT>> oldPsi;
     oldPsi.resize(S.n, 0.0);
+    S.setConvolutionIndex();
     S.setNonLocalR();
     std::cout << "after setting NonLocalR" << std::endl;
     S.setNonLocalC();
@@ -318,7 +395,7 @@ int main (int argc, char **argv)
     FLT pinDensity = 0.0;
     for (int i=0;i<numsteps;i++) {
         //std::cerr << "step " << i << std::endl;
-        S.step(dt, epsilon, g, oldPsi);
+        S.step(dt, epsilon, g, k0, oldPsi);
         //std::cerr << "step " << i << std::endl;
         oldPsi = S.psi;
         FLT psiMax = 0.0;
@@ -328,6 +405,8 @@ int main (int argc, char **argv)
         if ((i % nonLocal == 0) && i>0) {
             S.setNonLocalR();
             S.setNonLocalC();
+        }
+        if (i % numprint == 0) {
             isPinWheel.resize(0);
             bool showfft = true;
             psiphase = L.getArgPrincipal(S.psi);
@@ -339,7 +418,9 @@ int main (int argc, char **argv)
             phiMax = L.maxVal(phir);
             phiMin = L.minVal(phir);
             cv::Mat I = L.vect2mat(psiphase, nx, ny);
-            L.getPatternFrequency(I, showfft);
+            std::cout << "just after cv:Mat" << std::endl;
+            vector<FLT> fitCoeffs = L.getPatternFrequency(I, showfft, nbins);
+            std::cout << "just after get pattern frequency" << std::endl;
             FLT low = 0.1*(psiMax-psiMin) + psiMin;
             cout << " just before isPinWheel psi complexZero" << endl;
             isPinWheel = S.complexZero(L.getAbs(S.psi),low);
@@ -351,11 +432,8 @@ int main (int argc, char **argv)
             low = 0.1*(phiMax-psiMin) + phiMin;
             isPinWheel = S.complexZero(L.getAbs(S.phi), low);
             cout << " just after is Pinwheel phi complexZero" << endl;
-            pinDensity = pinCount/(L.columnSpacing*L.columnSpacing);
+            pinDensity = pinCount*L.columnSpacing*L.columnSpacing;
             cout<<"pattern frequency " << L.patternFrequency << "  columnSpacing " << L.columnSpacing << " pinWheel density " << pinDensity << std::endl;
-        }
-#ifdef COMPILE_PLOTTING
-        if ((i % numprint) == 0) {
             psiphase = L.getArgPrincipal(S.psi);
             psir = L.getAbs(S.psi);
             phiphase = L.getArgPrincipal(S.phi);
@@ -368,6 +446,7 @@ int main (int argc, char **argv)
             cout << "max arg of normalpsi  " << L.maxVal(psiphase) << " min arg of normalpsi " << L.minVal(psiphase) <<  " iteration " << i <<endl;
             cerr << "max val of abs(psi)  " << psiMax << " min val of abs(psi) " << psiMin <<  " iteration " << i <<endl;
             cout << "max val of abs(psi)  " << psiMax << " min val of abs(psi) " << psiMin <<  " iteration " << i <<endl;
+#ifdef COMPILE_PLOTTING
             hgv1->updateData (&psiphase);
             hgv1->clearAutoscaleColour();
 
@@ -377,8 +456,34 @@ int main (int argc, char **argv)
             hgv3->updateData (&phir);
             hgv3->clearAutoscaleColour();
 
-            hgv4->updateData (&phiphase);
-            hgv4->clearAutoscaleColour();
+            graphX = L.binVals;
+            graphY = L.histogram;
+
+            FLT xmax = 75.0;
+
+            arma::vec xfit(nbins);
+            graphX2.resize(nbins,0);
+            for(int i=0;i<nbins;i++){
+                graphX2[i] = xmax*(float)i/(float)(nbins-1);
+                xfit[i] = graphX2[i];
+            }
+            arma::vec cf(fitCoeffs.size());
+            for(int i=0;i<fitCoeffs.size();i++){
+                cf[i] = fitCoeffs[i];
+            }
+            arma::vec yfit = arma::polyval(cf,xfit);
+            graphY2.resize(nbins,0);
+            for(int i=0;i<nbins;i++){
+                graphY2[i] = yfit[i];
+            }
+
+            graphX3[0] = L.patternFrequency;
+            graphX3[1] = L.patternFrequency;
+
+            gvPinDensity->update (graphX, graphY, 0);
+            gvPinDensity->update (graphX2, graphY2, 1);
+            gvPinDensity->update (graphX3, graphY3, 2);
+
 
             if (saveplots) {
                 if (vidframes) {
@@ -389,17 +494,18 @@ int main (int argc, char **argv)
                     savePngs (logpath, "psi", i , v1);
                 }
             }
-
-        } // end of print on numprin     disp.closeDisplay();
         // rendering the graphics. After each simulation step, check if enough time
         // has elapsed for it to be necessary to call v1.render().
-        steady_clock::duration sincerender = steady_clock::now() - lastrender;
-        if (duration_cast<milliseconds>(sincerender).count() > 170) { // 17 is about 60 Hz
-            glfwPollEvents();
-            v1.render();
-            lastrender = steady_clock::now();
-        }
+            steady_clock::duration sincerender = steady_clock::now() - lastrender;
+            if (duration_cast<milliseconds>(sincerender).count() > 170) { // 17 is about 60 Hz
+                glfwPollEvents();
+                v1.render();
+                lastrender = steady_clock::now();
+            }
+        //
 #endif
+        } //end of if on numprint
+
      } //end of numsteps loop
 //cout << " just after time step i = " << i << endl;
 

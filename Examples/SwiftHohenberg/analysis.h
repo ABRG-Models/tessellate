@@ -424,28 +424,33 @@ class Analysis {
         cv::Mat I = cv::Mat::zeros(nx,ny,CV_32F);
         int k=0;
         for(int i=0;i<nx;i++){
-            for(int j=ny; j-->0;){ // invert y axis of image
+            for(int j=0; j<ny; j++){
                 I.at<float>(j,i) = (A[k]+maxV)*scale;
                 k++;
             }
         }
+        std::cout << "in vect2mat k " << k << std::endl;
         return I;
     }
 
-    std::vector<FLT> getPatternFrequency(cv::Mat I, bool showfft){
+    std::vector<FLT> getPatternFrequency(cv::Mat I, bool showfft, int nbins) {
 
         // ANALYSIS STEP 5. ESTIMATE ISO-ORIENTATION COLUMN SPACING
         int sampleRange = 1;
-        int polyOrder = 4;
-        binVals.resize(nBins,0.);
-        histogram.resize(nBins,0.);
+        int polyOrder = 6;
+        binVals.resize(nbins,0.);
+        histogram.resize(nbins,0.);
 
         // Get frequency histogram from image
         //cv::Mat I1 = CHM.getDifferenceImage(orResponseSampled[0],orResponseSampled[2]);
-        std::vector<std::vector<FLT> > h1 = CHM.fft(I, nBins, gaussBlur, showfft);
+        std::vector<std::vector<FLT> > h1 = CHM.fft(I, this->nBins, this->gaussBlur, showfft);
 
+
+        // add together two histograms (maybe should be done before combining?)
+        binVals = h1[0];      // get histogram bin mid-values
+        histogram = h1[1];
         // sample portion of histogram to fit
-        int nsamp = nBins*sampleRange;
+        int nsamp = nbins/2;
         arma::vec xs(nsamp);
         arma::vec ys(nsamp);
         for(int i=0;i<nsamp;i++){
@@ -467,15 +472,26 @@ class Analysis {
         // get frequency at which high-res model peaks
         FLT maxVal = -1e9;
         FLT maxX = 0;
+        /* finding the max from the smooth function
         for(int i=0;i<fitres;i++){
             if(yfit[i]>maxVal){
                 maxVal = yfit[i];
                 maxX = xfit[i];
             }
         }
+        */
+//this is cludged in order to avoid the zero frequency peak.
+        for(int i=10;i<nsamp;i++){
+            if(ys[i]>maxVal){
+                maxVal = ys[i];
+                maxX = xs[i];
+            }
+        }
+
+        std::cout <<"in getPatternFrequency MaxVal " << maxVal << " maxX " << maxX << std::endl;
 
         this->patternFrequency = maxX; // units are cycles / ROI-width
-        this->columnSpacing = ROIwid / patternFrequency;  // spacing between iso-orientation columns in units of cortex sheet, e.g., to plot scale bar on maps
+        this->columnSpacing = this->ROIwid / patternFrequency;  // spacing between iso-orientation columns in units of cortex sheet, e.g., to plot scale bar on maps
 
         // return coeffs in standard vector
         std::vector<FLT> coeffs(cf.size());

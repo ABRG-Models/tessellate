@@ -89,6 +89,7 @@ public:
     vector<complex<FLT>> nonLocalC;
     morph::HexGrid* Hgrid;
     morph::HexGrid* kernel;
+    vector<vector<int>> convIndex;
 // empty constructor
     shSolver(){};
 // constructor with HexGrid passed in
@@ -146,10 +147,10 @@ public:
         this->nonLocalR.resize(this->n, 0.0);
         this->nonLocalC.resize(this->n, 0.0);
         //now set up kernel
-        this->sigma = this->xspan * 2.0 / 37.5;
+        this->sigma = 0.26; //based on freqency estimates of wavelength from simulations
         this->gNorm = 1.0 /(2.0*PI*sigma*sigma);
         this->kernel = new morph::HexGrid(this->ds, 10.0*sigma, 0, morph::HexDomainShape::Boundary);
-        this->kernel->setCircularBoundary(2.0*sigma);
+        this->kernel->setCircularBoundary(3.0*sigma);
         this->kernelRdata.resize(this->kernel->num(),0.0);
         this->kernelCdata.resize(this->kernel->num());
         this->psi.resize(n);
@@ -266,8 +267,9 @@ public:
         afile << " max x " << Hgrid->getXmax(0.0) << " min x " << Hgrid->getXmin(0.0) << endl;
         this->setNoFlux();
         afile << "before psi.resize()" << endl;
-        this->psi.resize(n);;
-        this->phi.resize(n);;
+        std::complex<FLT> const zero(0.0, 0.0);
+        this->psi.resize(n, zero);;
+        this->phi.resize(n, zero);;
         afile << "after psi.resize()" << endl;
         this->nonLocalR.resize(this->n, 0.0);
         this->nonLocalC.resize(this->n, 0.0);
@@ -324,17 +326,29 @@ public:
         }
     }
 
+    void setConvolutionIndex() {
+        this->convIndex.resize(this->n);
+        this->Hgrid->convolveIndex(*(this->kernel),this->convIndex);
+    }
+
     //method to set the non-local terms
     void setNonLocalR() {
         vector<FLT> psimodsq;
         psimodsq.resize(this->n, 0.0);
         //now convolve
-        //std::cout << "before Hgrid->convolve " << std::endl;
-        for (int i=0; i<this->n; i++) {
+       // std::cout << "before Hgrid->convolve setNonLocalR" << std::endl;
+        for (int i=0; i<this->n-10; i++) {
             FLT zmod = abs(this->psi[i]);
             psimodsq[i] = zmod*zmod;
+            this->nonLocalR[i] = 0.0;
         }
-        this->Hgrid->convolve(*(this->kernel), this->kernelRdata, psimodsq, this->nonLocalR);
+        for (int i=0;i<this->n-10;i++) {
+            for (auto kh: kernel->hexen) {
+                this->nonLocalR[i] += this->kernelRdata[kh.vi]*psimodsq[this->convIndex[i][kh.vi]];
+                //std::cout << "after Hgrid->convolve i " << i << " kh.vi " << kh.vi << std::endl;
+            }
+        }
+        //this->Hgrid->convolve(*(this->kernel), this->kernelCdata, psimodsq, this->nonLocalR);
        // std::cout << "after Hgrid->convolve " << std::endl;
     }
 
@@ -343,11 +357,18 @@ public:
         vector<complex<FLT>> psisq;
         psisq.resize(this->n, 0.0);
         //now convolve
-        //std::cout << "before Hgrid->convolve " << std::endl;
-        for (int i=0; i<this->n; i++) {
+       // std::cout << "before Hgrid->convolve setNonLocalC" << std::endl;
+        for (int i=0; i<this->n-10; i++) {
             psisq[i] = this->psi[i]*this->psi[i];
+            this->nonLocalC[i].real(0.0);
+            this->nonLocalC[i].imag(0.0);
         }
-        this->Hgrid->convolve(*(this->kernel), this->kernelCdata, psisq, this->nonLocalC);
+        for (int i=0;i<this->n-10;i++) {
+            for (auto kh: kernel->hexen) {
+                this->nonLocalC[i] += this->kernelRdata[kh.vi]*psisq[this->convIndex[i][kh.vi]];
+            }
+        }
+        //this->Hgrid->convolve(*(this->kernel), this->kernelCdata, psisq, this->nonLocalC);
         //std::cout << "after Hgrid->convolve " << std::endl;
     }
 
@@ -399,7 +420,7 @@ public:
  */
 
   // function to compute the derivative of the Swift Hohenberg equation
-     void compute_dpsidt(vector<complex<FLT>>& inPsi, vector<complex<FLT>>& dpsidt, FLT epsilon, FLT g) {
+     void compute_dpsidt(vector<complex<FLT>>& inPsi, vector<complex<FLT>>& dpsidt, FLT epsilon, FLT g, FLT k0) {
         vector<complex<FLT>> lapPhi(this->n,0);
         vector <FLT> psimodsq;
         int size = inPsi.size();
@@ -413,8 +434,8 @@ public:
         lapPhi = getLaplacian(this->phi);
 
         for (int h=0; h < this->n; h++) {
-            dpsidt[h] = -2.0f*this->phi[h] - lapPhi[h] + (epsilon - 1.0f)*inPsi[h] +  (1.0f - g) * psimodsq[h]*inPsi[h];
-            dpsidt[h] += (2.0f-g) * (this->nonLocalR[h] * inPsi[h] + this->nonLocalC[h] * std::conj(inPsi[h])) / this->gNorm;
+            dpsidt[h] = -2.0f*k0*k0*this->phi[h] - lapPhi[h] + (epsilon - k0*k0*k0*k0)*inPsi[h] +  (1.0f - g) * psimodsq[h]*inPsi[h];
+            dpsidt[h] -= (2.0f-g) * (this->nonLocalR[h] * inPsi[h] + 0.5f * this->nonLocalC[h] * std::conj(inPsi[h])) / this->gNorm;
         }
     }//end of method compute_dpsidt
 
@@ -551,7 +572,7 @@ public:
 
 
   //function to time step periodic b.c.s
-    void step(FLT dt, FLT epsilon, FLT g, vector<complex<FLT>> oldPsi)
+    void step(FLT dt, FLT epsilon, FLT g, FLT k0, vector<complex<FLT>> oldPsi)
     {
         // 1. Do integration of psi
         // Runge-Kutta integration for psi. This time, I'm taking
@@ -569,7 +590,7 @@ public:
             * Stage 1
         */
         //cout << "in step before Stage 1" << endl;
-        this->compute_dpsidt (this->psi, dpsidt, epsilon, g);
+        this->compute_dpsidt (this->psi, dpsidt, epsilon, g, k0);
         for (int di=0; di< this->n; ++di) {
             K1[di] = dpsidt[di] * dt;
             Ntst[di] = this->psi[di] + K1[di] * 0.5f ;
@@ -579,7 +600,7 @@ public:
          * Stage 2
         */
         //cout << "in step before Stage 2" << endl;
-        this->compute_dpsidt (Ntst, dpsidt, epsilon, g);
+        this->compute_dpsidt (Ntst, dpsidt, epsilon, g, k0);
         for (int di=0; di< this->n; ++di) {
             K2[di] = dpsidt[di] * dt;
             Ntst[di] = this->psi[di] + K2[di] * 0.5f;
@@ -589,7 +610,7 @@ public:
          * Stage 3
          */
         //cout << "in step before Stage 3" << endl;
-        this->compute_dpsidt (Ntst, dpsidt,  epsilon, g);
+        this->compute_dpsidt (Ntst, dpsidt,  epsilon, g, k0);
         for (int di=0; di < this->n; ++di) {
             K3[di] = dpsidt[di] * dt;
             Ntst[di] = this->psi[di] + K3[di];
@@ -599,7 +620,7 @@ public:
          * Stage 4
          */
         //cout << "in step before Stage 4" << endl;
-        this->compute_dpsidt (Ntst, dpsidt, epsilon, g);
+        this->compute_dpsidt (Ntst, dpsidt, epsilon, g, k0);
         for (int di=0; di < this->n; ++di) {
             K4[di] = dpsidt[di] * dt;
         }
@@ -714,7 +735,7 @@ public:
             cerr << " compleZero invector " << invector.size() << " not equal to this->n " << this->n << endl;
             std::exit(0);
         }
-        result.resize(invector.size(), true);
+        result.resize(invector.size());
         int count = 0;
         for(int di=0; di<this->n; di++) {
             if (invector[di] > min) {
