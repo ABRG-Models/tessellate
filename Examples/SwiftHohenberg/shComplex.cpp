@@ -99,18 +99,20 @@ int main (int argc, char **argv)
     int red = conf.getInt("red",100);
     int green = conf.getInt("green",100);
     int fov = conf.getInt("fov",45);
+    int nbins = conf.getInt("nbins",100);
     bool Lcontinue = conf.getBool("Lcontinue",false);
     bool LfixedSeed = conf.getBool("LfixedSeed",false);
     bool overwrite_logs = conf.getBool("overwrite_logs",1);
+    bool showfft = conf.getBool("showfft",true);
 
     std::cerr << "after reading the json values " << std::endl;
 // include the analysis methods
-    int nbins = 100;
-    int gaussBlur = 1;
+    int gaussBlur = -2;
     FLT radius = 1.016;
-    FLT ROIwid =  2.0;
+    FLT ROIwid =  1.0;
     Analysis L(nbins, gaussBlur, ROIwid);
 
+    ofstream pinData (logpath + "/pinCount.data",ios::app);
     cout<< "just before first data read"<< " Lcontinue " << Lcontinue <<endl;
     unsigned int seed = time(NULL);
     // A rando2yym uniform generator returning real/floating point types
@@ -127,10 +129,11 @@ int main (int argc, char **argv)
     const unsigned int win_width = conf.getUInt ("win_width", 1025UL);
     unsigned int win_height_default = static_cast<unsigned int>(wratio * (float)win_width);
     const unsigned int win_height = conf.getUInt ("win_height", win_height_default);
-    cout << "just before new Visual object" << endl;
+    cout << "just before new Visual object height " << win_height << " width " << win_width << endl;
     // Set up the morph::Visual object which provides the visualization scene (and
     // a GLFW window to show it in)
     morph::Visual v1(win_width, win_height, "psi and phi fields ");
+    cout << "just after new Visual object" << endl;
     // Set a white background . This value has the order
     // 'RGBA', though the A(alpha) makes no difference.
     v1.backgroundWhite();
@@ -174,31 +177,61 @@ int main (int argc, char **argv)
 //section for rectangular grid
     float xwidth = 2.0f;
     float ywidth = 2.0f;
+    /*
     shSolver S(scale, xspan, logpath, xwidth, ywidth , lengthScale);
-    int ny = std::floor(ywidth/S.ds);
-    int nx = S.n / ny;
-    std::cout << "nx " << nx << " ny " << ny << std::endl;
-    if (nx*ny != S.n) {
-        std::cerr << "error nx*ny " << nx*ny << " S.n " << S.n << std::endl;
+    int nx = std::floor(xwidth/S.ds);
+    int ny = S.n / nx;
+    int rowlen = S.Hgrid->d_rowlen;
+    int numrows = S.Hgrid->d_numrows;
+    FLT hexDepth = S.Hgrid->depth();
+    FLT hexWidth = S.Hgrid->width();
+    std::cout << "nx " << nx << " ny " << ny << " rowlen " << rowlen << " numrows " << numrows <<  std::endl;
+    std::cout << "width " << hexWidth << std::endl <<  " depth " << hexDepth << std::endl;
+    if (rowlen*numrows != S.n) {
+        std::cerr << "error rowlen*numrows " << rowlen*numrows << " S.n " << S.n << std::endl;
         //return -1;
     }
-
-
+*/
 // Constructor for parallelogram domain
-//    shSolver S(scale,  xspan, logpath);
-    cout << "just after creating shCSolver" <<endl;
-// Constructor for a rectangular domain
-//    shSolver S(scale, xspan, logpath, red, green);
-//    cout << "just after creating shCSolver" <<endl;
-    //S.setNoFlux();
-    cout << "just after setHexType()" << endl;
+    shSolver S(scale,  xspan, logpath, lengthScale);
+    S.setPeriodic();
+    FLT pspan = xspan/3.0f;
+    int rowlen =  S.Hgrid->d_rowlen;
+    int numrows = S.Hgrid->d_numrows;
+    FLT hexWidth = S.Hgrid->width();
+    FLT hexDepth = S.Hgrid->depth();
+    FLT parDepth = S.Hgrid->depth();
+    FLT parWidth = S.Hgrid->width() - hexDepth/1.7321;
+    FLT colStretch = parWidth - parDepth/1.7321;
+    FLT parArea = parDepth*parWidth;
+    std::cout << "parallelogram solver rowlen " << rowlen << " numrows  " << numrows << " hex spacing " << S.ds << std::endl;
+    std::cout << "width = " << parWidth << " height = " << parDepth << " colStretch " << colStretch << " hexArea " << parArea << std::endl;
+   // S.setNoFlux();
+    /*
+    if ((numrows-1)%4 == 0) {
+        S.setPeriodicEven();
+    }
+    else {
+        S.setPeriodicOdd();
+    }
+    */
+    cout << "just after setting boundary conditions" << endl;
 
     string fname = logpath + "/first.h5";
 //Now set i.c.s
+    vector<FLT> psiphase;
+    vector<FLT> phiphase;
+    vector <FLT> psir;
+    vector <FLT> phir;
     if (Lcontinue) {
-        morph::HdfData data(fname);
-        data.read_contained_vals("c",S.phi); //Laplacian of psi
-        data.read_contained_vals("n",S.psi); //main variable
+        morph::HdfData ginput(fname,1);
+        ginput.read_contained_vals("psiR",psir); //Laplacian of psi
+        ginput.read_contained_vals("psiPhase",psiphase); //main variable
+        ginput.read_contained_vals("phiR",phir); //main variable
+        ginput.read_contained_vals("psiPhase",phiphase); //main variable
+        S.psi = L.complexify(psir, psiphase);
+        S.phi = L.complexify(phir, phiphase);
+        std::cout << "size of S.psi " << S.psi.size() << " size of psiR " << psir.size() << endl;
     }
     else {
     //
@@ -210,23 +243,24 @@ int main (int argc, char **argv)
             choice1 = ruf.get();
             S.phi[h.vi] = std::polar (1.0f, - choice1 * 2.0f * 3.1415927f);
         }
-    }
-    std::cout << "after setting ics" << std::endl;
     //
     /*set up sinusoidal initial conditions parallelogram
 
     int di = 0;
-    for (int i = 0; i<S.Hgrid->d_numrows; i++) {
-        FLT eta = i * 8.0 * PI/(S.Hgrid->d_numrows);
-        for (int j=0; j<S.Hgrid->d_rowlen; j++) {
-            FLT theta = j * 8.0 * PI/(S.Hgrid->d_rowlen * 1.0);
-            di = i*S.Hgrid->d_rowlen + j;
-            S.psi[di] = std::polar (1.0f, - cos(eta) * sin(theta));
-            S.phi[di] = std::polar (1.0f, - cos(eta) * sin(theta));
+    FLT etaInc = 32.0*PI/(1.0f*(numrows-1));
+    FLT thetaInc = 32.0*PI/(1.0f*(rowlen-1));
+        for (int i = 0; i<numrows; i++) {
+            FLT eta = i * etaInc;
+            for (int j=0; j<rowlen; j++) {
+                FLT theta = j*thetaInc;
+                S.psi[di] = std::polar (1.0f, - theta + eta);
+                S.phi[di] = std::polar (1.0f, -  theta + eta);
+                di++;
+                //std::cout << " in i.c loop i " << i << " j " << j << " di " << di << std::endl;
+            }
         }
-    }
-    */
-    /*
+
+    //
     //set up sinusoidal initial conditions rectangle
         int di = 0;
         int tcount = 0;
@@ -245,28 +279,26 @@ int main (int argc, char **argv)
         std::cout << "number of hexes given psi values " << tcount << std::endl;
     }
     */
-    vector<FLT> psiphase;
-    vector <FLT> psir;
-    vector <FLT> phir;
-    vector <FLT> phiphase;
-
-    psiphase = L.getArgPrincipal(S.psi);
-    psir = L.getAbs(S.psi);
-    phir = L.getAbs(S.phi);
-    phiphase = L.getArgPrincipal(S.phi);
-    std::cout << " just before setting graphics" << std::endl;
+        psiphase = L.getArgPrincipal(S.psi);
+        psir = L.getAbs(S.psi);
+        phir = L.getAbs(S.phi);
+        phiphase = L.getArgPrincipal(S.phi);
+        std::cout << "size of S.psi " << S.psi.size() << " size of psiR " << psir.size() << endl;
+    }
+    std::cout << "after setting i.c.s" << std::endl;
+    std::cout << " just before setting graphics hexGrid width " << hexWidth << std::endl;
 #ifdef COMPILE_PLOTTING
     // Spatial offset, for positioning of HexGridVisuals
     morph::Vector<float> spatOff;
 
     // A. Offset in x direction to the left.
     // by half a hexGrid width
-    float xzero = -0.5*S.Hgrid->width();
-    float yzero = 0.5*S.Hgrid->width();
+    float xzero = -0.55*hexWidth;
+    float yzero = 0.55*hexWidth;
     float txtoff = -0.55f;
 
     spatOff = { xzero, yzero, 0.0 };
-    morph::ColourMapType cmt = morph::ColourMap<FLT>::strToColourMapType (conf.getString ("colourmap", "Jet"));
+    morph::ColourMapType cmt = morph::ColourMap<FLT>::strToColourMapType (conf.getString ("colourmap", "Rainbow"));
     // Z position scaling - how hilly/bumpy the visual will be.
     morph::Scale<FLT,float> zscale; zscale.setParams (0.0f, 0.0f);
     // The second is the colour scaling. Set this to autoscale.
@@ -278,23 +310,23 @@ int main (int argc, char **argv)
     // The second is the colour scaling. Set this to autoscale.
     hgv1->colourScale.do_autoscale = true;
     hgv1->cm.setType (cmt);
-    hgv1->hexVisMode = morph::HexVisMode::Triangles;
+    hgv1->hexVisMode = morph::HexVisMode::HexInterp;
     hgv1->addLabel ("Psi phase", {-0.05f, txtoff, 0.0f}, morph::colour::black, morph::VisualFont::VeraSerif, 0.05, 56);
+    std::cout << "after hgv1 " << std::endl;
     hgv1->finalize();
     v1.addVisualModel (hgv1);
-
     // A. Offset in x direction to the right.
     // move back a whole hexGrid width
-    xzero += S.Hgrid->width();
+    xzero += hexWidth + 0.05f;
     spatOff = { xzero, yzero, 0.0 };
     morph::HexGridVisual<FLT>* hgv2 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
-    hgv2->setScalarData (&psir);
+    hgv2->setScalarData (&psiphase);
     // Z position scaling - how hilly/bumpy the visual will be.
     hgv2->zScale.setParams (0.0f, 0.0f);
     // The second is the colour scaling. Set this to autoscale.
     hgv2->colourScale.do_autoscale = true;
     hgv2->cm.setType (cmt);
-    hgv2->hexVisMode = morph::HexVisMode::Triangles;
+    hgv2->hexVisMode = morph::HexVisMode::HexInterp;
     hgv2->addLabel ("Psi modulus", {-0.05f, txtoff, 0.0f}, morph::colour::black, morph::VisualFont::VeraSerif, 0.05, 56);
     //hgv1->addLabel ("Variable A", { -0.2f, RD.ellipse_b*-1.4f, 0.01f },
     //                morph::colour::white, morph::VisualFont::Vera, 0.1f, 48);
@@ -302,18 +334,20 @@ int main (int argc, char **argv)
     hgv2->finalize();
     v1.addVisualModel (hgv2);
 
+    std::cout << "after hgv2 " << std::endl;
     // A. Offset in y direction down.
     // move down a whole hexGrid width
-    yzero -= S.Hgrid->width();
+    yzero -= hexWidth + 0.05f;
     spatOff = { xzero, yzero, 0.0 };
+    cmt = morph::ColourMap<FLT>::strToColourMapType (conf.getString ("colourmap", "Greyscale"));
     morph::HexGridVisual<FLT>* hgv3 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
-    hgv3->setScalarData (&phir);
+    hgv3->setScalarData (&psir);
     // Z position scaling - how hilly/bumpy the visual will be.
     hgv3->zScale.setParams (0.0f, 0.0f);
     // The second is the colour scaling. Set this to autoscale.
     hgv3->colourScale.do_autoscale = true;
     hgv3->cm.setType (cmt);
-    hgv3->hexVisMode = morph::HexVisMode::Triangles;
+    hgv3->hexVisMode = morph::HexVisMode::HexInterp;
     hgv3->addLabel ("Phi modulus", {-0.05f, txtoff, 0.0f}, morph::colour::black, morph::VisualFont::VeraSerif, 0.05, 56);
     hgv3->finalize();
     v1.addVisualModel (hgv3);
@@ -340,16 +374,14 @@ int main (int argc, char **argv)
     // Graph of frequency estimate
     std::vector<float> graphX(1,0);
     std::vector<float> graphY(1,0);
-    std::vector<float> graphX2(1,0);
-    std::vector<float> graphY2(1,0);
     std::vector<float> graphX3(2,0);
     std::vector<float> graphY3(2,0);
     graphY3[1] = 1.0;
-    int sampwid = 150;
-    float wid = 1.5;
-    float hei = 1.5;
-    FLT grid2offx = xzero-1.5*S.Hgrid->width();
-    morph::GraphVisual<float>* gvPinDensity = new morph::GraphVisual<float> (v1.shaderprog, v1.tshaderprog, morph::Vector<float>{grid2offx,-S.Hgrid->width()*0.7,0.0f});
+    int sampwid = nbins;
+    float wid = 2.0;
+    float hei = 2.0;
+    FLT grid2offx = xzero-1.5*hexWidth;
+    morph::GraphVisual<float>* gvPinDensity = new morph::GraphVisual<float> (v1.shaderprog, v1.tshaderprog, morph::Vector<float>{grid2offx,-hexWidth*0.7,0.0f});
     morph::DatasetStyle ds;
     ds.linewidth = 0.00;
     ds.linecolour = {0.0, 0.0, 0.0};
@@ -362,14 +394,6 @@ int main (int argc, char **argv)
     gvPinDensity->setsize(wid,hei);
     gvPinDensity->setlimits (0,(float)sampwid*0.5,0,1.0); // plot up to nyquist (pixels / 2)
     gvPinDensity->setdata (graphX, graphY, ds);
-    morph::DatasetStyle ds2;
-    ds2.markerstyle = morph::markerstyle::circle;
-    ds2.markersize = 0.0;
-    ds2.markercolour = {0.0, 0.0, 0.0};
-    ds2.markergap = 0.0;
-    ds2.linewidth = 0.01;
-    ds2.linecolour = {1.0, 0.0, 0.0};
-    gvPinDensity->setdata (graphX2, graphY2, ds2);
     morph::DatasetStyle ds3;
     ds3.markerstyle = morph::markerstyle::circle;
     ds3.markersize = 0.0;
@@ -385,14 +409,25 @@ int main (int argc, char **argv)
     vector<complex<FLT>> oldPsi;
     oldPsi.resize(S.n, 0.0);
     S.setConvolutionIndex();
+    std::cout << "after setConvolution index" << std::endl;
     S.setNonLocalR();
     std::cout << "after setting NonLocalR" << std::endl;
     S.setNonLocalC();
     std::cout << "after setting NonLocalC" << std::endl;
+    /*
+    if ((numrows-1)%4 == 0) {
+        S.setPeriodicEven();
+    }
+    else {
+        S.setPeriodicOdd();
+    }
+    */
     oldPsi = S.psi;
     vector<bool> isPinWheel;
     int pinCount = 0;
     FLT pinDensity = 0.0;
+    cv::Mat I;
+    vector<vector<FLT>> psiImg;
     for (int i=0;i<numsteps;i++) {
         //std::cerr << "step " << i << std::endl;
         S.step(dt, epsilon, g, k0, oldPsi);
@@ -408,82 +443,77 @@ int main (int argc, char **argv)
         }
         if (i % numprint == 0) {
             isPinWheel.resize(0);
-            bool showfft = true;
-            psiphase = L.getArgPrincipal(S.psi);
+            psiphase.resize(0);
+            phiphase.resize(0);
+            psir.resize(0);
+            phir.resize(0);
+            psiphase = L.scaleVect(L.getArgPrincipal(S.psi),1.0f);
             psir = L.getAbs(S.psi);
-            phiphase = L.getArgPrincipal(S.phi);
+            phiphase = L.scaleVect(L.getArgPrincipal(S.phi),1.0f);
             phir = L.getAbs(S.phi);
             psiMax = L.maxVal(psir);
             psiMin = L.minVal(psir);
             phiMax = L.maxVal(phir);
             phiMin = L.minVal(phir);
-            cv::Mat I = L.vect2mat(psiphase, nx, ny);
+            cout << "psir top left " << psir[(numrows-1)*rowlen] << " psiphase top left  " << psiphase[(numrows-1)*rowlen] << std::endl;
+            cout << "phir top left  " << phir[(numrows-1)*rowlen] << " phiphase top left  " << phiphase[(numrows-1)*rowlen] << std::endl;
+            cout << "psir bottom left " << psir[0] << " psiphase bottom left  " << psiphase[0] << std::endl;
+            cout << "phir bottom left  " << phir[0] << " phiphase bottom left  " << phiphase[0] << std::endl;
+            cout << "psir top right " << psir[numrows*rowlen-1] << " psiphase top right  " << psiphase[numrows*rowlen-1] << std::endl;
+            cout << "phir top right  " << phir[numrows*rowlen-1] << " phiphase top right  " << phiphase[numrows*rowlen-1] << std::endl;
+            cout << "psir bottom right " << psir[rowlen-1] << " psiphase bottom right  " << psiphase[rowlen-1] << std::endl;
+            cout << "phir bottom right  " << phir[rowlen-1] << " phiphase bottom right  " << phiphase[rowlen-1] << std::endl;
+            cout << "psir middle " << psir[numrows/2 + rowlen/2] << " psiphase middle  " << psiphase[numrows/2 + rowlen/2] << std::endl;
+            cout << "phir middle  " << phir[numrows/2 + rowlen/2] << " phiphase middle  " << phiphase[numrows/2 + rowlen/2] << std::endl;
+            I = L.vect2matCut(psiphase, numrows, rowlen);
+            psiImg = L.vect2img(psiphase, numrows, rowlen);
             std::cout << "just after cv:Mat" << std::endl;
-            vector<FLT> fitCoeffs = L.getPatternFrequency(I, showfft, nbins);
+            L.getPatternFrequency(I, showfft);
+            if (showfft) {
+                cv::imshow("my window",I);
+                cv::waitKey();
+            }
             std::cout << "just after get pattern frequency" << std::endl;
             FLT low = 0.1*(psiMax-psiMin) + psiMin;
             cout << " just before isPinWheel psi complexZero" << endl;
-            isPinWheel = S.complexZero(L.getAbs(S.psi),low);
+            isPinWheel = S.complexZero(psir,low);
             pinCount = L.countBool(isPinWheel);
+            //scaling factor L.columnSpacing is multiplied by length of RoI
+            //scaling factor pinWheel count is divided by area of counting
+            pinDensity = pinCount*L.columnSpacing*L.columnSpacing*colStretch*colStretch/parArea;
+            pinData << " " << pinCount << " " << pinDensity << std::endl;
+            cout<<"pattern frequency " << L.patternFrequency << "  columnSpacing " << L.columnSpacing << " pinWheel density " << pinDensity << std::endl;
+            cerr << "max arg of normalpsi  " << L.maxVal(psiphase) << " min arg of normalpsi " << L.minVal(psiphase) <<  " iteration " << i <<endl;
+            cout << "max arg of normalpsi  " << L.maxVal(psiphase) << " min arg of normalpsi " << L.minVal(psiphase) <<  " iteration " << i <<endl;
+            cerr << "max val of abs(psi)  " << psiMax << " min val of abs(psi) " << psiMin <<  " iteration " << std::endl;
             std::cout << " pinwheel count via bools " << pinCount << std::endl;
             cout << " just after is Pinwheel psi complexZero" << endl;
             cout << " just before isPinWheel phi complexZero" << endl;
             isPinWheel.resize(0);
             low = 0.1*(phiMax-psiMin) + phiMin;
-            isPinWheel = S.complexZero(L.getAbs(S.phi), low);
+            isPinWheel = S.complexZero(phir, low);
             cout << " just after is Pinwheel phi complexZero" << endl;
-            pinDensity = pinCount*L.columnSpacing*L.columnSpacing;
-            cout<<"pattern frequency " << L.patternFrequency << "  columnSpacing " << L.columnSpacing << " pinWheel density " << pinDensity << std::endl;
-            psiphase = L.getArgPrincipal(S.psi);
-            psir = L.getAbs(S.psi);
-            phiphase = L.getArgPrincipal(S.phi);
-            phir = L.getAbs(S.phi);
-            psiMax = L.maxVal(psir);
-            psiMin = L.minVal(psir);
-            phiMax = L.maxVal(phir);
-            phiMin = L.minVal(phir);
-            cerr << "max arg of normalpsi  " << L.maxVal(psiphase) << " min arg of normalpsi " << L.minVal(psiphase) <<  " iteration " << i <<endl;
-            cout << "max arg of normalpsi  " << L.maxVal(psiphase) << " min arg of normalpsi " << L.minVal(psiphase) <<  " iteration " << i <<endl;
-            cerr << "max val of abs(psi)  " << psiMax << " min val of abs(psi) " << psiMin <<  " iteration " << i <<endl;
-            cout << "max val of abs(psi)  " << psiMax << " min val of abs(psi) " << psiMin <<  " iteration " << i <<endl;
 #ifdef COMPILE_PLOTTING
             hgv1->updateData (&psiphase);
             hgv1->clearAutoscaleColour();
 
-            hgv2->updateData (&psir);
+            hgv2->updateData (&phiphase);
             hgv2->clearAutoscaleColour();
 
-            hgv3->updateData (&phir);
+            hgv3->updateData (&psir);
             hgv3->clearAutoscaleColour();
 
-            graphX = L.binVals;
-            graphY = L.histogram;
-
-            FLT xmax = 75.0;
-
-            arma::vec xfit(nbins);
-            graphX2.resize(nbins,0);
-            for(int i=0;i<nbins;i++){
-                graphX2[i] = xmax*(float)i/(float)(nbins-1);
-                xfit[i] = graphX2[i];
-            }
-            arma::vec cf(fitCoeffs.size());
-            for(int i=0;i<fitCoeffs.size();i++){
-                cf[i] = fitCoeffs[i];
-            }
-            arma::vec yfit = arma::polyval(cf,xfit);
-            graphY2.resize(nbins,0);
-            for(int i=0;i<nbins;i++){
-                graphY2[i] = yfit[i];
+            graphX = L.xs;
+            graphY = L.ys;
+            for (int i=0;i<nbins/2;i++){
+                std::cout << " frequency " << graphX[i] << " power " << graphY[i] << std::endl;
             }
 
             graphX3[0] = L.patternFrequency;
             graphX3[1] = L.patternFrequency;
 
             gvPinDensity->update (graphX, graphY, 0);
-            gvPinDensity->update (graphX2, graphY2, 1);
-            gvPinDensity->update (graphX3, graphY3, 2);
-
+            gvPinDensity->update (graphX3, graphY3, 1);
 
             if (saveplots) {
                 if (vidframes) {
@@ -510,16 +540,25 @@ int main (int argc, char **argv)
 //cout << " just after time step i = " << i << endl;
 
 //code run at end of timestepping
-/*
 //first save the  ofstream outFile;
-    morph::HdfData data(fname);
-    data.add_contained_vals("c",S.phi); //Laplacian of psi
-    data.add_contained_vals("n",S.psi); //main variable
-    data.add_val ("/g", g); //g parameter
-    data.add_val ("/epsilon", epsilon); //epsilon paramater
+    psir.resize(0);
+    psiphase.resize(0);
+    phir.resize(0);
+    phiphase.resize(0);
+    psiphase = L.scaleVect(L.getArgPrincipal(S.psi), 1.0f);
+    psir = L.getAbs(S.psi);
+    phiphase = L.scaleVect(L.getArgPrincipal(S.phi),1.0f);
+    phir = L.getAbs(S.phi);
+    morph::HdfData outdata(fname);
+    outdata.add_contained_vals("psiR",psir); //Laplacian of psi
+    outdata.add_contained_vals("psiPhase",psiphase); //main variable
+    outdata.add_contained_vals("phiR",phir); //Laplacian of psi
+    outdata.add_contained_vals("phiPhase",phiphase); //main variable
+    //outdata.add_contained_vals("psiImg", psiImg); //psi as a matrix
+    //data.add_val ("/g", g); //g parameter
+    //data.add_val ("/epsilon", epsilon); //epsilon paramater
     cout << " just after writing data "  << endl;
 //
-*/
 #ifdef COMPILE_PLOTTING
     cout << "Ctrl-c or press x in graphics window to exit.\n";
     v1.keepOpen();

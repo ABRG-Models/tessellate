@@ -231,10 +231,10 @@ public:
         this->nonLocalR.resize(this->n, 0.0);
         this->nonLocalC.resize(this->n, 0.0);
         //now set up kernel
-        this->sigma = this->xspan / 37.5;
+        this->sigma = 0.142857;
         this->gNorm = 1.0 /(2.0*PI*sigma*sigma);
-        this->kernel = new morph::HexGrid(this->ds, 10.0*sigma, 0, morph::HexDomainShape::Boundary);
-        this->kernel->setCircularBoundary(3.0*sigma);
+        this->kernel = new morph::HexGrid(this->ds, 6.0*sigma, 0, morph::HexDomainShape::Boundary);
+        this->kernel->setCircularBoundary(2.0*sigma);
         this->kernelRdata.resize(this->kernel->num(),0.0);
         this->kernelCdata.resize(this->kernel->num());
         afile << "after psi.resize()" << endl;
@@ -251,36 +251,35 @@ public:
         this->bound = bound;
         this->seedPoint = seedPoint;
         this->lengthScale = lengthScale;
-        ofstream afile (this->logpath + "/ksdebug.out",ios::app );
         FLT s = pow(2.0, this->scale-1);
         this->ds = 1.0/s;
         this->overds = 1.0/(this->lengthScale*this->lengthScale*ds*ds);
         Hgrid = new HexGrid(this->ds, this->xspan, 0.0, morph::HexDomainShape::Rectangle);
-        afile << "after setting rectangle boundary " << endl;
+        std::cout << "after setting rectangle boundary " << std::endl;
         Hgrid->setRectangularBoundary(x, y);
-        afile << "after setting rectangle boundary " << endl;
+        std::cout << "after setting rectangle boundary " << std::endl;
         Hgrid->populate_d_neighbours();
         this->n = Hgrid->num();
         N.resize(n);
-        afile << "after populating d_neighbours " << endl;
-        afile << "after creating HexGrid ds =  " << this->ds << endl;
-        afile << " max x " << Hgrid->getXmax(0.0) << " min x " << Hgrid->getXmin(0.0) << endl;
-        this->setNoFlux();
-        afile << "before psi.resize()" << endl;
+        std::cout << "after populating d_neighbours n " << this->n << std::endl;
+        std::cout << "after creating HexGrid ds =  " << this->ds << std::endl;
+        std::cout << " max x " << Hgrid->getXmax(0.0) << " min x " << Hgrid->getXmin(0.0) << std::endl;
+        //this->setNoFlux();
+        std::cout << "before psi.resize()" << std::endl;
         std::complex<FLT> const zero(0.0, 0.0);
-        this->psi.resize(n, zero);;
-        this->phi.resize(n, zero);;
-        afile << "after psi.resize()" << endl;
+        this->psi.resize(n, zero);
+        this->phi.resize(n, zero);
+        std::cout << "after psi.resize()" << std::endl;
         this->nonLocalR.resize(this->n, 0.0);
         this->nonLocalC.resize(this->n, 0.0);
         //now set up kernel
-        this->sigma = this->xspan / 37.5;
+        this->sigma = x / 12.0;
         this->gNorm = 1.0 /(2.0*PI*sigma*sigma);
-        this->kernel = new morph::HexGrid(this->ds, 10.0*sigma, 0, morph::HexDomainShape::Boundary);
-        this->kernel->setCircularBoundary(3.0*sigma);
+        this->kernel = new morph::HexGrid(this->ds, 6.0*sigma, 0, morph::HexDomainShape::Boundary);
+        this->kernel->setCircularBoundary(2.0f*sigma);
         this->kernelRdata.resize(this->kernel->num(),0.0);
         this->kernelCdata.resize(this->kernel->num());
-        cout << " end of shSolver bezCurvePath " << endl;
+        std::cout << " end of shSolver rectangular " << std::endl;
 
     }; // end of shSolver constructor
 
@@ -336,20 +335,24 @@ public:
         vector<FLT> psimodsq;
         psimodsq.resize(this->n, 0.0);
         //now convolve
-       // std::cout << "before Hgrid->convolve setNonLocalR" << std::endl;
+        //std::cout << "before Hgrid->convolve setNonLocalR" << std::endl;
         for (int i=0; i<this->n-10; i++) {
             FLT zmod = abs(this->psi[i]);
             psimodsq[i] = zmod*zmod;
             this->nonLocalR[i] = 0.0;
         }
-        for (int i=0;i<this->n-10;i++) {
+        for (int i=0;i<this->n;i++) {
             for (auto kh: kernel->hexen) {
+                if (convIndex[i][kh.vi] < 0 || convIndex[i][kh.vi] > this->n) {
+                    //std::cout << "after Hgrid->convolve i " << i << " kh.vi " << kh.vi << " convIndex " << convIndex[i][kh.vi] << std::endl;
+                    this->nonLocalR[i] = 0;
+                    continue;
+                }
                 this->nonLocalR[i] += this->kernelRdata[kh.vi]*psimodsq[this->convIndex[i][kh.vi]];
-                //std::cout << "after Hgrid->convolve i " << i << " kh.vi " << kh.vi << std::endl;
             }
         }
         //this->Hgrid->convolve(*(this->kernel), this->kernelCdata, psimodsq, this->nonLocalR);
-       // std::cout << "after Hgrid->convolve " << std::endl;
+        //std::cout << "after Hgrid->convolve " << std::endl;
     }
 
     //method to set the non-local terms
@@ -365,6 +368,12 @@ public:
         }
         for (int i=0;i<this->n-10;i++) {
             for (auto kh: kernel->hexen) {
+                if (convIndex[i][kh.vi] < 0 || convIndex[i][kh.vi] > this->n) {
+                    //std::cout << "after Hgrid->convolve i " << i << " kh.vi " << kh.vi << " convIndex " << convIndex[i][kh.vi] << std::endl;
+                    this->nonLocalC[i].real(0.0);
+                    this->nonLocalC[i].imag(0.0);
+                    continue;
+                }
                 this->nonLocalC[i] += this->kernelRdata[kh.vi]*psisq[this->convIndex[i][kh.vi]];
             }
         }
@@ -512,7 +521,8 @@ public:
         } //end of loop over HexGri this->setNoFlux();
     } // end of setNoFlux
 
-    //set boundary conditions by setting neigbour indexes
+
+    //set periodic boundary conditions for a parallelogram grid
     void setPeriodic() {
 
         int di = 0;
@@ -529,32 +539,30 @@ public:
         Hgrid->d_ne[Hgrid->d_rowlen-1] = di;
         //rest of bottom row
         offset = Hgrid->d_rowlen*(Hgrid->d_numrows-1);
-        std::cout << "bottom row offset " << offset << std::endl;
         for (unsigned int j=1; j<Hgrid->d_rowlen-1; j++) {
             Hgrid->d_nsw[j] = offset + j;
             Hgrid->d_nse[j] = offset + j+1;
         }
+        std::cout << "bottom row  d_nsw[1] " << Hgrid->d_nsw[1] << std::endl;
         //top row now
         //top left can resuse offset
-        Hgrid->d_nw[offset] = offset + Hgrid->d_rowlen -1;
+        Hgrid->d_nw[offset] = offset + Hgrid->d_rowlen - 1;
         Hgrid->d_nnw[offset] = Hgrid->d_rowlen-1;;
         Hgrid->d_nne[offset] = 0;
         //top right now
-        offset = Hgrid->d_rowlen*Hgrid->d_numrows -1;
+        offset = Hgrid->d_rowlen*(Hgrid->d_numrows) - 1;
         Hgrid->d_nnw[offset] = Hgrid->d_rowlen-2;
         Hgrid->d_nne[offset] = Hgrid->d_rowlen-1;
         Hgrid->d_ne[offset] = Hgrid->d_rowlen*(Hgrid->d_numrows-1);
         Hgrid->d_nse[offset] = Hgrid->d_rowlen*(Hgrid->d_numrows-2);
         //now the interior of the top row
         offset = Hgrid->d_rowlen*(Hgrid->d_numrows-1);
-        std::cout << "top row offset " << offset << " d_nnw " << Hgrid->d_nnw[offset] << std::endl;
-        std::cout << "bottom row 1 " << " d_nnw " << Hgrid->d_nnw[1] << std::endl;
         for (unsigned int j=1; j<Hgrid->d_rowlen-1; j++) {
             di = offset + j;
             Hgrid->d_nnw[di] = j-1;
             Hgrid->d_nne[di] = j;
         }
-        std::cout << "bottom row 1 " << " d_nsw " << Hgrid->d_nsw[1] << std::endl;
+        std::cout << "top row offset " << offset << " d_nnw " << Hgrid->d_nnw[offset] << std::endl;
         //now the b.c.s on the interior applied at start and end of each row
         for (unsigned int i=1; i<Hgrid->d_numrows-1; i++) {
             offset = i*Hgrid->d_rowlen;
@@ -565,11 +573,138 @@ public:
             Hgrid->d_ne[offset+Hgrid->d_rowlen-1] = offset;
             Hgrid->d_nse[offset+Hgrid->d_rowlen-1] = offset - Hgrid->d_rowlen;
         }
-        std::cout << "left col row 1 " << " d_nw " << Hgrid->d_nw[205] << std::endl;
-        std::cout << "right col row 1 " << " d_ne " << Hgrid->d_ne[409] << std::endl;
+        std::cout << "left col row 1 " << " d_nw " << Hgrid->d_nw[Hgrid->d_rowlen] << std::endl;
+        std::cout << "right col row 1 " << " d_ne " << Hgrid->d_ne[2*Hgrid->d_rowlen-1] << std::endl;
     }
 
+    //set boundary conditions for a rectangular domain with an the bottom row odd
+    void setPeriodicOdd() {
 
+        int di = 0;
+        int offset = 0;
+        //along bottom row first
+        //bottom left corner
+        Hgrid->d_nnw[0] = 2*Hgrid->d_rowlen-1;
+        Hgrid->d_nw[0] = Hgrid->d_rowlen-1;
+        Hgrid->d_nsw[0] = Hgrid->d_rowlen * Hgrid->d_numrows - 1;
+        Hgrid->d_nse[0] = Hgrid->d_rowlen * (Hgrid->d_numrows-1) ;
+        //bottom right hand corner
+        Hgrid->d_nsw[Hgrid->d_rowlen-1] = Hgrid->d_rowlen*Hgrid->d_numrows - 1;
+        Hgrid->d_nse[Hgrid->d_rowlen-1] = Hgrid->d_rowlen*Hgrid->d_numrows - 2;
+        Hgrid->d_ne[Hgrid->d_rowlen-1] = 0;
+        //rest of bottom row
+        offset = Hgrid->d_rowlen*(Hgrid->d_numrows-1);
+        std::cout << "bottom row offset " << offset << std::endl;
+        for (unsigned int j=1; j<Hgrid->d_rowlen-1; j++) {
+            Hgrid->d_nsw[j] = offset + j-1;
+            Hgrid->d_nse[j] = offset + j;
+        }
+        //top row now
+        //top left can resuse offset
+        Hgrid->d_nsw[offset] = offset - 1;
+        Hgrid->d_nw[offset] = offset + Hgrid->d_rowlen - 1;
+        Hgrid->d_nnw[offset] = 0;
+        Hgrid->d_nne[offset] = 1;
+        //top right now
+        offset = Hgrid->d_rowlen*Hgrid->d_numrows -1;
+        Hgrid->d_nnw[offset] = Hgrid->d_rowlen-1;
+        Hgrid->d_nne[offset] = 0;
+        Hgrid->d_ne[offset] = Hgrid->d_rowlen*(Hgrid->d_numrows-1);
+        //now the interior of the top row
+        offset = Hgrid->d_rowlen*(Hgrid->d_numrows-1);
+        std::cout << "top row offset " << offset << " d_nnw " << Hgrid->d_nnw[offset] << std::endl;
+        std::cout << "bottom row 1 " << " d_nnw " << Hgrid->d_nnw[1] << std::endl;
+        for (unsigned int j=1; j<Hgrid->d_rowlen-1; j++) {
+            di = offset + j;
+            Hgrid->d_nnw[di] = j;
+            Hgrid->d_nne[di] = j+1;
+        }
+        std::cout << "bottom row 1 " << " d_nsw " << Hgrid->d_nsw[1] << std::endl;
+        //now the b.c.s on the interior applied at start and end of each row
+        for (unsigned int i=1; i<Hgrid->d_numrows-1; i+=2) {
+            offset = i*Hgrid->d_rowlen;
+            //left boundary
+            Hgrid->d_nw[offset] = offset + Hgrid->d_rowlen - 1;
+            //right boundary
+            Hgrid->d_ne[offset+Hgrid->d_rowlen-1] = offset;
+            Hgrid->d_nse[offset+Hgrid->d_rowlen-1] = offset - Hgrid->d_rowlen;
+            Hgrid->d_nne[offset+Hgrid->d_rowlen-1] = offset + Hgrid->d_rowlen;
+        }
+        for (unsigned int i=2; i<Hgrid->d_numrows-2; i+=2) {
+            offset = i*Hgrid->d_rowlen;
+            //left boundary
+            Hgrid->d_nnw[offset] = offset + 2*Hgrid->d_rowlen - 1;
+            Hgrid->d_nw[offset] = offset + Hgrid->d_rowlen - 1;
+            Hgrid->d_nsw[offset] = offset - Hgrid->d_rowlen - 1;
+            //right boundary
+            Hgrid->d_ne[offset+Hgrid->d_rowlen-1] = offset;
+        }
+    }
+
+    //set boundary conditions with the bottom row even
+    void setPeriodicEven() {
+
+        int di = 0;
+        int offset = Hgrid->d_rowlen*(Hgrid->d_numrows-1);
+        FLT rowlen = Hgrid->d_rowlen;
+        //along bottom row first
+        //bottom left corner
+        Hgrid->d_nw[di] = rowlen-1;
+        Hgrid->d_nsw[di] = offset+rowlen-1;
+        Hgrid->d_nse[di] = offset;
+        //bottom right hand corner
+        Hgrid->d_nsw[rowlen-1] = offset+rowlen-2;
+        Hgrid->d_nse[rowlen-1] = offset+rowlen-1 ;
+        Hgrid->d_ne[rowlen-1] = di;
+        Hgrid->d_nne[rowlen-1] = rowlen;
+        //rest of bottom row
+        std::cout << "bottom row offset " << offset << std::endl;
+        for (unsigned int j=1; j<Hgrid->d_rowlen-1; j++) {
+            Hgrid->d_nsw[j] = offset + j-1;
+            Hgrid->d_nse[j] = offset + j;
+        }
+        //top row now
+        //top left can resuse offset
+        Hgrid->d_nw[offset] = offset + rowlen -1;
+        Hgrid->d_nnw[offset] = 0;
+        Hgrid->d_nne[offset] = 1;
+        //top right now
+        Hgrid->d_nnw[offset+rowlen-1] = Hgrid->d_rowlen-1;
+        Hgrid->d_nne[offset+rowlen-1] = 0;
+        Hgrid->d_ne[offset+rowlen-1] = offset;
+        Hgrid->d_nse[offset+rowlen-1] = offset-rowlen;
+        //now the interior of the top row
+        for (unsigned int j=1; j<Hgrid->d_rowlen-1; j++) {
+            di = offset + j;
+            Hgrid->d_nnw[di] = j;
+            Hgrid->d_nne[di] = j+1;
+        }
+        std::cout << "top row offset " << offset << " d_nnw " << Hgrid->d_nnw[offset] << std::endl;
+        std::cout << "bottom row 1 " << " d_nnw " << Hgrid->d_nnw[1] << std::endl;
+        std::cout << "bottom row 1 " << " d_nsw " << Hgrid->d_nsw[1] << std::endl;
+        //now the b.c.s on the interior applied at start and end of each row
+        for (unsigned int i=2; i<Hgrid->d_numrows; i+=2) {
+            offset = i*rowlen;
+            std::cout << " left side offset " << offset << std::endl;
+            //left boundary
+            //Hgrid->d_nnw[offset] = offset + 2*Hgrid->d_rowlen - 1;
+            Hgrid->d_nnw[offset] = offset + 2*rowlen - 1;
+            Hgrid->d_nw[offset] = offset + rowlen - 1;
+            Hgrid->d_nsw[offset] = offset - rowlen + 1;
+            //right boundary
+            Hgrid->d_ne[offset+rowlen-1] = offset;
+        }
+        for (unsigned int i=1; i<Hgrid->d_numrows; i+=2) {
+            offset = i*rowlen;
+            std::cout << " right side offset " << offset << std::endl;
+            //left boundary
+            Hgrid->d_nw[offset] = offset + rowlen - 1;
+            //right boundary
+            Hgrid->d_nne[offset+Hgrid->d_rowlen-1] = offset+rowlen;
+            Hgrid->d_ne[offset+Hgrid->d_rowlen-1] = offset;
+            Hgrid->d_nse[offset+Hgrid->d_rowlen-1] = offset-rowlen;
+        }
+    }
 
   //function to time step periodic b.c.s
     void step(FLT dt, FLT epsilon, FLT g, FLT k0, vector<complex<FLT>> oldPsi)
