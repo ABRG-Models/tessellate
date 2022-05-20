@@ -6,20 +6,20 @@
 {
     "dt" : 0.00005,
     "epsilon" : 0.1,
-    "g" : 1.1,
+    "g" : 0.98,
     "k0" : 1.0,
     "scale" : 7,
     "xspan" : 6.0,
-    "numsteps" : 3000000,
+    "numsteps" : 100,
     "numAdjust" : 1000000,
-    "numprint" : 995,
+    "numprint" : 99,
     "logpath" : "./logsSwiftHohenberg",
     "boundaryFalloffDist" : 0.0078,
     "aNoiseGain" : 0.1,
     "numsectors" : 12,
     "red" : 100,
     "green" : 160,
-    "fov" : 50,
+    "fov" : 70,
     "Lcontinue" : false,
     "LfixedSeed" : false,
     "nnInitialOffset" : 1.0,
@@ -31,11 +31,13 @@
     "skipMorph" : 1,
     "lminradius" : 0,
     "off" : 1,
-    "nonLocal" : 99,
+    "nonLocal" : 45,
     "saveplots" : true,
     "vidframes" : true,
+    "showfft" : true,
     "win_width" : 2050,
-    "NUMPOINTS" : 5
+    "NUMPOINTS" : 5,
+    "nbins" : 100
 }
 EOF
 
