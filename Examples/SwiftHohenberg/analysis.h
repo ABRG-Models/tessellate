@@ -521,6 +521,7 @@ class Analysis {
 
 
     //Convert a vect to cv::Mat for a parallelogram grid
+    //this will convert the parallelogram to a rectangle
     cv::Mat vect2matPar(std::vector<FLT> A, int nrows, int rowl) {
 
         int n = nrows*rowl;
@@ -533,37 +534,28 @@ class Analysis {
             if(minV>A[i]){ minV = A[i]; }
         }
         FLT scale = 1./(1.0*maxV);
-        int longnrows = floor(1.29*nrows);
-        //C.nx = rowl;
-        //C.ny = longnrows;
         vector<FLT> col;
-        vector<FLT> longcol;
-        col.resize(nrows);
-        longcol.resize(longnrows);
-        FLT pgram[longnrows][rowl];
-        cv::Mat I = cv::Mat::zeros(longnrows,rowl,CV_32F);
+        FLT pgram[nrows][nrows];
+        cv::Mat I = cv::Mat::zeros(nrows+2,nrows+2,CV_32F);
         int k=0;
-        //std::cout << "in vect2matPar nrows " << nrows << " rowl " << rowl << " longnrows " << longnrows << std::endl;
-        for(int j=0;j<rowl;j++){
+        std::cout << "in vect2matPar nrows " << nrows << " rowl " << " scale " << scale << std::endl;
+        for(int j=0;j<nrows;j++){
             for(int i=0; i<nrows; i++){
                 int offset = i*rowl;
-                col[i] = (A[offset+j])*scale;
+                pgram[i][j] = (A[offset+j])*scale;
                 k++;
             }
-            longcol = lengthenVector(col,longnrows);
-            for (int i=0;i<longnrows;i++) {
-                pgram[i][j] = longcol[i];
-            }
+
         }
 
-        int offset = (longnrows-1)/2 + 1;
-        for(int i=0;i<longnrows;i+=2){
+        int offset = (nrows-1)/2 + 1;
+        for(int i=0;i<nrows;i+=2){
             offset--;
-            for(int j=0; j<rowl; j++) {
+            for(int j=0; j<nrows; j++) {
                 I.at<FLT>(i,j) = pgram[i][(j+offset)%rowl];
             }
             int ir = i+1;
-            for(int j=0; j<rowl; j++){
+            for(int j=0; j<nrows; j++){
                 I.at<FLT>(ir,j) = pgram[ir][(j+offset)%rowl];
             }
             //std::cout <<"in vect2matPar i " << i <<  " offset " << offset << " k= " << k <<std::endl;
@@ -571,8 +563,8 @@ class Analysis {
         return I;
     }
 
-
     //Convert a vect to cv::Mat for a parallelogram grid
+    //cutting out a square region on the base.
     cv::Mat vect2matCut(std::vector<FLT> A, int nrows, int rowl) {
 
         int n = nrows*rowl;
@@ -585,33 +577,25 @@ class Analysis {
             if(minV>A[i]){ minV = A[i]; }
         }
         FLT scale = 1./(1.0*maxV);
-        int longnrows = floor(1.29*nrows);
-        //C.nx = rowl;
-        //C.ny = longnrows;
         vector<FLT> col;
-        vector<FLT> longcol;
         col.resize(nrows);
-        longcol.resize(longnrows);
-        FLT pgram[longnrows][rowl];
+        FLT pgram[nrows][rowl];
         int k=0;
         //std::cout << "in vect2matPar nrows " << nrows << " rowl " << rowl << " longnrows " << longnrows << std::endl;
         for(int j=0;j<rowl;j++){
             for(int i=0; i<nrows; i++){
                 int offset = i*rowl;
-                col[i] = (A[offset+j])*scale;
+                pgram[i][j] = (A[offset+j])*scale;
                 k++;
             }
-            longcol = lengthenVector(col,longnrows);
-            for (int i=0;i<longnrows;i++) {
-                pgram[i][j] = longcol[i];
-            }
+
         }
 
-        int offset = (longnrows-1)/2 + 1;
+        int offset = (nrows-1)/2 + 1;
         int trail = 0;
         //cv::Mat I = cv::Mat::zeros(longnrows,rowl,CV_32F);
-        cv::Mat I = cv::Mat::zeros(rowl-offset+10,rowl-offset+10,CV_32F);
-        for(int i=0;i<rowl-(longnrows-1)/2;i+=2){
+        cv::Mat I = cv::Mat::zeros(rowl-offset+2,rowl-offset+2,CV_32F);
+        for(int i=0;i<rowl-(nrows-1)/2;i+=2){
             offset--;
             trail++;
             for(int j=offset; j<rowl-trail; j++) {
@@ -622,6 +606,18 @@ class Analysis {
                 I.at<FLT>(ir,j-offset) = pgram[ir][j];
             }
             //std::cout <<"in vect2matCut i " << i <<  " offset " << offset << "trail =  " << trail  <<std::endl;
+        }
+        return I;
+    }
+
+    cv::Mat sqmatrix2mat(vector<vector<FLT>> matrix, int iRoI) {
+        std::cout << "in sqmatrix2mat size " << iRoI << " matrix size " << matrix.size() << std::endl;
+        cv::Mat I = cv::Mat::zeros(iRoI, iRoI, CV_32F);
+        for (int i=0; i<iRoI; i++) {
+            for (int j=0; j<iRoI; j++) {
+                I.at<FLT>(i,j) = matrix[i][j];
+               // std::cout << "ij" << i << j << " matrix val " << matrix[i][j] << " I val " << I.at<FLT>(i,j) << std::endl;
+            }
         }
         return I;
     }
@@ -676,43 +672,7 @@ class Analysis {
         }
         return result;
     }
-    /*Convert a vect to cv::Mat for an RoI centred on the origin
-    cv::Mat vect2mat(std::vector<FLT> A, FLT roI) {
 
-        int rowlen = floor(roI/(2.0f*this->ds));
-        int numrows = floor(roI/(1.7321f*this->ds));
-        int n = nrows*rowl;
-        FLT maxV = -1e9;
-        FLT minV = +1e9;
-        for(int i=0; i<n; i++){
-            if(maxV<fabs(A[i])){
-                maxV = fabs(A[i]);
-            } // THIS WAY ENSURE THAT ZERO DIFF ALWAYS MAPS TO VAL OF 0.5
-            if(minV>A[i]){ minV = A[i]; }
-        }
-        FLT scale = 1./(2*maxV);
-
-        cv::Mat I = cv::Mat::zeros(nrows,nrows,CV_32F);
-        vector<FLT> row;
-        vector<FLT> longrow;
-        row.resize(rowl);
-        longrow.resize(nrows);
-        int k=0;
-        for(int i=0;i<nrows;i++){
-            for(int j=0; j<rowl; j++){
-                row[j] = (A[k]+maxV)*scale;
-                k++;
-            }
-            longrow = lengthenVector(row, nrows);
-            for (int j=0; j<nrows; j++) {
-                I.at<FLT>(i,j) = longrow[j];
-            }
-        }
-        std::cout << "in vect2mat k " << k << std::endl;
-        return I;
-    }
-}
-*/
     void getPatternFrequency(cv::Mat I, bool showfft) {
         // ANALYSIS STEP 5. ESTIMATE ISO-ORIENTATION COLUMN SPACING
         this->histogram.resize(this->nBins);
@@ -725,12 +685,13 @@ class Analysis {
         binVals = h1[0];      // get histogram bin mid-values
         histogram = h1[1];
         // sample portion of histogram to fit
-        int nsamp = this->nBins/2;
+        int nsamp = this->nBins;
         this->xs.resize(nsamp,0.0);
         this->ys.resize(nsamp,0.0);
         for(int i=0; i<nsamp; i++){
             xs[i] = binVals[i];
             ys[i] = histogram[i];
+            std::cout << "xs " << binVals[i] << " ys " << histogram[i] << std::endl;
         }
 
 
@@ -739,7 +700,7 @@ class Analysis {
         FLT maxVal = -1e9;
         FLT maxX = 0;
 //this is cludged in order to avoid the zero frequency peak.
-        for(int i=2;i<nsamp;i++){
+        for(int i=3;i<nsamp;i++){
             if(ys[i]>maxVal){
                 maxVal = ys[i];
                 maxX = xs[i];
@@ -749,8 +710,7 @@ class Analysis {
         std::cout <<"in getPatternFrequency MaxVal " << maxVal << " maxX " << maxX << std::endl;
 
         this->patternFrequency = maxX; // units are cycles / ROI-width
-        //FLT unitLength = 4.03;
-        this->columnSpacing = 1.0 / patternFrequency;  // spacing between iso-orientation columns in units of cortex sheet, e.g., to plot scale bar on maps
+        this->columnSpacing = this->ROIwid / patternFrequency;  // spacing between iso-orientation columns in units of cortex sheet, e.g., to plot scale bar on maps
 
 
     }

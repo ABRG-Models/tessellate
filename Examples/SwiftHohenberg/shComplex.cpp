@@ -25,6 +25,7 @@
 #include <chrono>
 #include <complex>
 
+/*
 #ifdef COMPILE_PLOTTING
 //! Helper function to save PNG images with a suitable name
 void savePngs (const std::string& logpath, const std::string& name,
@@ -37,6 +38,7 @@ void savePngs (const std::string& logpath, const std::string& name,
     v.saveImage (ff1.str());
 }
 #endif
+*/
 using std::array;
 using std::string;
 using std::stringstream;
@@ -48,6 +50,7 @@ using morph::HdfData;
 using morph::Tools;
 using namespace std;
 using namespace std::chrono;
+namespace fs = std::filesystem;
 
 int main (int argc, char **argv)
 {
@@ -75,6 +78,8 @@ int main (int argc, char **argv)
         float  x_default = conf.getFloat("x_default",0.0);
         float  y_default = conf.getFloat("y_default",0.0);
         float  wratio = conf.getFloat("wratio", 0.844f);
+        float  radius = conf.getFloat("radius", 1.0);
+        float  ROIwid = conf.getFloat("ROIwid", 1.4);
 #else
         double dt = conf.getDouble("dt",0.0001);
         double epsilon = conf.getDouble("epsilon",0.1);
@@ -88,10 +93,12 @@ int main (int argc, char **argv)
         double  x_default = conf.getDouble("x_default",0.0);
         double  y_default = conf.getDouble("y_default",0.0);
         double  wratio = conf.getDouble("wratio", 0.844f);
+        double radius = conf.getDouble("radius", 1.0);
+        double  ROIwid = conf.getDouble("ROIwid", 1.4);
 #endif
     int scale = conf.getInt("scale",8);
     int numsteps = conf.getInt("numsteps",100);
-    int numAdjust = conf.getInt("numAdjust",1000000);
+    int numCheck = conf.getInt("numCheck",1000000);
     int numprint = conf.getInt("numprint",95);
     int nonLocal = conf.getInt("nonLocal",95);
     string logpath = conf.getString("logpath","./logsSwiftHohenberg");
@@ -100,6 +107,7 @@ int main (int argc, char **argv)
     int green = conf.getInt("green",100);
     int fov = conf.getInt("fov",45);
     int nbins = conf.getInt("nbins",100);
+    int gaussBlur = conf.getInt("gaussBlur", -2);
     bool Lcontinue = conf.getBool("Lcontinue",false);
     bool LfixedSeed = conf.getBool("LfixedSeed",false);
     bool overwrite_logs = conf.getBool("overwrite_logs",1);
@@ -107,9 +115,7 @@ int main (int argc, char **argv)
 
     std::cerr << "after reading the json values " << std::endl;
 // include the analysis methods
-    int gaussBlur = -2;
-    FLT radius = 1.016;
-    FLT ROIwid =  1.0;
+    FLT halfWidth = 0.5*ROIwid;
     Analysis L(nbins, gaussBlur, ROIwid);
 
     ofstream pinData (logpath + "/pinCount.data",ios::app);
@@ -169,52 +175,14 @@ int main (int argc, char **argv)
     //Readjust Dn for a single region
     pair<FLT,FLT> centroid(0.0,0.0);
 
-/* section for solving on the circle Tessllation
+// section for solving on the circle Tessllation
 // if (skipMorph) return 0;
     cout << "just before creating shCSolver" <<endl;
     shSolver S(scale, xspan, logpath, radius, centroid, lengthScale);
-*/
-//section for rectangular grid
-    float xwidth = 2.0f;
-    float ywidth = 2.0f;
-    /*
-    shSolver S(scale, xspan, logpath, xwidth, ywidth , lengthScale);
-    int nx = std::floor(xwidth/S.ds);
-    int ny = S.n / nx;
-    int rowlen = S.Hgrid->d_rowlen;
-    int numrows = S.Hgrid->d_numrows;
-    FLT hexDepth = S.Hgrid->depth();
-    FLT hexWidth = S.Hgrid->width();
-    std::cout << "nx " << nx << " ny " << ny << " rowlen " << rowlen << " numrows " << numrows <<  std::endl;
-    std::cout << "width " << hexWidth << std::endl <<  " depth " << hexDepth << std::endl;
-    if (rowlen*numrows != S.n) {
-        std::cerr << "error rowlen*numrows " << rowlen*numrows << " S.n " << S.n << std::endl;
-        //return -1;
-    }
-*/
-// Constructor for parallelogram domain
-    shSolver S(scale,  xspan, logpath, lengthScale);
-    S.setPeriodic();
-    FLT pspan = xspan/3.0f;
-    int rowlen =  S.Hgrid->d_rowlen;
-    int numrows = S.Hgrid->d_numrows;
+    FLT circleArea = PI*radius*radius;
     FLT hexWidth = S.Hgrid->width();
     FLT hexDepth = S.Hgrid->depth();
-    FLT parDepth = S.Hgrid->depth();
-    FLT parWidth = S.Hgrid->width() - hexDepth/1.7321;
-    FLT colStretch = parWidth - parDepth/1.7321;
-    FLT parArea = parDepth*parWidth;
-    std::cout << "parallelogram solver rowlen " << rowlen << " numrows  " << numrows << " hex spacing " << S.ds << std::endl;
-    std::cout << "width = " << parWidth << " height = " << parDepth << " colStretch " << colStretch << " hexArea " << parArea << std::endl;
-   // S.setNoFlux();
-    /*
-    if ((numrows-1)%4 == 0) {
-        S.setPeriodicEven();
-    }
-    else {
-        S.setPeriodicOdd();
-    }
-    */
+    std::cout << "hexWidth " << hexWidth << " hexDepth " << hexDepth << " circle Area " <<  circleArea << std::endl;
     cout << "just after setting boundary conditions" << endl;
 
     string fname = logpath + "/first.h5";
@@ -244,41 +212,6 @@ int main (int argc, char **argv)
             S.phi[h.vi] = std::polar (1.0f, - choice1 * 2.0f * 3.1415927f);
         }
     //
-    /*set up sinusoidal initial conditions parallelogram
-
-    int di = 0;
-    FLT etaInc = 32.0*PI/(1.0f*(numrows-1));
-    FLT thetaInc = 32.0*PI/(1.0f*(rowlen-1));
-        for (int i = 0; i<numrows; i++) {
-            FLT eta = i * etaInc;
-            for (int j=0; j<rowlen; j++) {
-                FLT theta = j*thetaInc;
-                S.psi[di] = std::polar (1.0f, - theta + eta);
-                S.phi[di] = std::polar (1.0f, -  theta + eta);
-                di++;
-                //std::cout << " in i.c loop i " << i << " j " << j << " di " << di << std::endl;
-            }
-        }
-
-    //
-    //set up sinusoidal initial conditions rectangle
-        int di = 0;
-        int tcount = 0;
-        for (int i = 0; i<nx; i++) {
-            FLT eta = i * 2.0 * PI/(nx * 1.0);
-            std::cout << "eta = " << eta << std::endl;
-            for (int j=0; j<ny; j++) {
-                FLT theta = j * 2.0 * PI/(ny * 1.0);
-                //std::cout << "eta = " << eta << std::endl;
-                di = i * nx + j;
-                tcount++;
-                S.psi[di] = std::polar (1.0f, - cos(eta) * sin(theta));
-                S.phi[di] = std::polar (1.0f, - cos(eta) * sin(theta));
-            }
-        }
-        std::cout << "number of hexes given psi values " << tcount << std::endl;
-    }
-    */
         psiphase = L.getArgPrincipal(S.psi);
         psir = L.getAbs(S.psi);
         phir = L.getAbs(S.phi);
@@ -312,8 +245,8 @@ int main (int argc, char **argv)
     hgv1->cm.setType (cmt);
     hgv1->hexVisMode = morph::HexVisMode::HexInterp;
     hgv1->addLabel ("Psi phase", {-0.05f, txtoff, 0.0f}, morph::colour::black, morph::VisualFont::VeraSerif, 0.05, 56);
-    std::cout << "after hgv1 " << std::endl;
     hgv1->finalize();
+    std::cout << "after hgv1 " << std::endl;
     v1.addVisualModel (hgv1);
     // A. Offset in x direction to the right.
     // move back a whole hexGrid width
@@ -392,7 +325,7 @@ int main (int argc, char **argv)
     gvPinDensity->xlabel="frequency (cycles/ROI-width)";
     gvPinDensity->ylabel="FFT magnitude";
     gvPinDensity->setsize(wid,hei);
-    gvPinDensity->setlimits (0,(float)sampwid*0.5,0,1.0); // plot up to nyquist (pixels / 2)
+    gvPinDensity->setlimits (0,(float)sampwid,0,1.0); // plot up to nyquist (pixels / 2)
     gvPinDensity->setdata (graphX, graphY, ds);
     morph::DatasetStyle ds3;
     ds3.markerstyle = morph::markerstyle::circle;
@@ -414,20 +347,14 @@ int main (int argc, char **argv)
     std::cout << "after setting NonLocalR" << std::endl;
     S.setNonLocalC();
     std::cout << "after setting NonLocalC" << std::endl;
-    /*
-    if ((numrows-1)%4 == 0) {
-        S.setPeriodicEven();
-    }
-    else {
-        S.setPeriodicOdd();
-    }
-    */
     oldPsi = S.psi;
     vector<bool> isPinWheel;
     int pinCount = 0;
     FLT pinDensity = 0.0;
     cv::Mat I;
     vector<vector<FLT>> psiImg;
+    //morph::HdfData outdata(fname,morph::FileAccess::ReadWrite);
+    morph::HdfData outdata(fname);
     for (int i=0;i<numsteps;i++) {
         //std::cerr << "step " << i << std::endl;
         S.step(dt, epsilon, g, k0, oldPsi);
@@ -455,18 +382,13 @@ int main (int argc, char **argv)
             psiMin = L.minVal(psir);
             phiMax = L.maxVal(phir);
             phiMin = L.minVal(phir);
-            cout << "psir top left " << psir[(numrows-1)*rowlen] << " psiphase top left  " << psiphase[(numrows-1)*rowlen] << std::endl;
-            cout << "phir top left  " << phir[(numrows-1)*rowlen] << " phiphase top left  " << phiphase[(numrows-1)*rowlen] << std::endl;
-            cout << "psir bottom left " << psir[0] << " psiphase bottom left  " << psiphase[0] << std::endl;
-            cout << "phir bottom left  " << phir[0] << " phiphase bottom left  " << phiphase[0] << std::endl;
-            cout << "psir top right " << psir[numrows*rowlen-1] << " psiphase top right  " << psiphase[numrows*rowlen-1] << std::endl;
-            cout << "phir top right  " << phir[numrows*rowlen-1] << " phiphase top right  " << phiphase[numrows*rowlen-1] << std::endl;
-            cout << "psir bottom right " << psir[rowlen-1] << " psiphase bottom right  " << psiphase[rowlen-1] << std::endl;
-            cout << "phir bottom right  " << phir[rowlen-1] << " phiphase bottom right  " << phiphase[rowlen-1] << std::endl;
-            cout << "psir middle " << psir[numrows/2 + rowlen/2] << " psiphase middle  " << psiphase[numrows/2 + rowlen/2] << std::endl;
-            cout << "phir middle  " << phir[numrows/2 + rowlen/2] << " phiphase middle  " << phiphase[numrows/2 + rowlen/2] << std::endl;
-            I = L.vect2matCut(psiphase, numrows, rowlen);
-            psiImg = L.vect2img(psiphase, numrows, rowlen);
+            std::pair<FLT, FLT> roIcentre;
+            roIcentre.first = 0.0f; roIcentre.second = 0.0f;
+            int iRoI = 2*floor(halfWidth/S.ds) + 1; //rowlength of square
+            vector<vector<FLT>> roIfield= S.fieldInRoI(psiphase, iRoI, halfWidth, roIcentre);
+            //I = L.vect2matCut(psiphase, numrows, rowlen);
+            I = L.sqmatrix2mat(roIfield, iRoI);
+            psiImg = roIfield;
             std::cout << "just after cv:Mat" << std::endl;
             L.getPatternFrequency(I, showfft);
             if (showfft) {
@@ -480,7 +402,8 @@ int main (int argc, char **argv)
             pinCount = L.countBool(isPinWheel);
             //scaling factor L.columnSpacing is multiplied by length of RoI
             //scaling factor pinWheel count is divided by area of counting
-            pinDensity = pinCount*L.columnSpacing*L.columnSpacing*colStretch*colStretch/parArea;
+            //pinDensity = pinCount*L.columnSpacing*L.columnSpacing/(parArea*cutWidth*cutWidth);
+            pinDensity = pinCount*L.columnSpacing*L.columnSpacing/circleArea;
             pinData << " " << pinCount << " " << pinDensity << std::endl;
             cout<<"pattern frequency " << L.patternFrequency << "  columnSpacing " << L.columnSpacing << " pinWheel density " << pinDensity << std::endl;
             cerr << "max arg of normalpsi  " << L.maxVal(psiphase) << " min arg of normalpsi " << L.minVal(psiphase) <<  " iteration " << i <<endl;
@@ -536,6 +459,29 @@ int main (int argc, char **argv)
 #endif
         } //end of if on numprint
 
+//code for checkpoint
+        if (i%numCheck == numCheck-1) {
+            std::cout << "in checkpointing " << std::endl;
+            psir.resize(0);
+            psiphase.resize(0);
+            phir.resize(0);
+            phiphase.resize(0);
+            psiphase = L.scaleVect(L.getArgPrincipal(S.psi), 1.0f);
+            psir = L.getAbs(S.psi);
+            phiphase = L.scaleVect(L.getArgPrincipal(S.phi),1.0f);
+            phir = L.getAbs(S.phi);
+            std::cout << " just before first write " << std::endl;
+            outdata.add_contained_vals("psiR",psir); //Laplacian of psi
+            std::cout << " just after first write " << std::endl;
+            outdata.add_contained_vals("psiPhase",psiphase); //main variable
+            outdata.add_contained_vals("phiR",phir); //Laplacian of psi
+            outdata.add_contained_vals("phiPhase",phiphase); //main variable
+    //outdata.add_contained_vals("psiImg", psiImg); //psi as a matrix
+    //data.add_val ("/g", g); //g parameter
+    //data.add_val ("/epsilon", epsilon); //epsilon paramater
+            cout << " just after writing data i "  << i <<  endl;
+        }
+
      } //end of numsteps loop
 //cout << " just after time step i = " << i << endl;
 
@@ -549,7 +495,6 @@ int main (int argc, char **argv)
     psir = L.getAbs(S.psi);
     phiphase = L.scaleVect(L.getArgPrincipal(S.phi),1.0f);
     phir = L.getAbs(S.phi);
-    morph::HdfData outdata(fname);
     outdata.add_contained_vals("psiR",psir); //Laplacian of psi
     outdata.add_contained_vals("psiPhase",psiphase); //main variable
     outdata.add_contained_vals("phiR",phir); //Laplacian of psi

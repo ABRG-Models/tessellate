@@ -222,7 +222,7 @@ public:
         this->n = Hgrid->num();
         cerr << "this->n " << this->n << " this->d_size " << Hgrid->d_size <<std::endl;
         std::cout << "length of rows " << Hgrid->d_rowlen << " number of rows " << Hgrid->d_numrows << std::endl;
-        std::cout << " size of HexGrid " << Hgrid->d_size << std::endl;
+        std::cout << " size of d_vexto " << Hgrid->d_size << " size of HexGrid " << Hgrid->num() << std::endl;
         afile << "after creating HexGrid ds =  " << this->ds << endl;
         afile << " max x " << Hgrid->getXmax(0.0) << " min x " << Hgrid->getXmin(0.0) << endl;
         this->psi.resize(this->n);
@@ -380,6 +380,49 @@ public:
         //this->Hgrid->convolve(*(this->kernel), this->kernelCdata, psisq, this->nonLocalC);
         //std::cout << "after Hgrid->convolve " << std::endl;
     }
+
+    vector<vector<FLT>> fieldInRoI(vector<FLT> A, int iRoI, FLT halfWidth, std::pair<FLT,FLT> centre) {
+        vector<vector<FLT>> roIField;
+        std::pair<FLT,FLT> botLeft; //coordinates of bottom left
+       // int iRoI = 2*floor(halfWidth/this->ds) + 1.0f; //rowlength of square
+        roIField.resize(iRoI);
+        for (int i=0; i<iRoI; i++) {
+            roIField[i].resize(iRoI,0);
+        }
+        botLeft.first = centre.first - halfWidth;
+        botLeft.second = centre.second - halfWidth;
+        int n = A.size();
+        std::cout << "size of A " << n << " size of iRoI " << iRoI << std::endl;
+        FLT maxV = -1e9;
+        FLT minV = +1e9;
+        for(int i=0; i<n; i++){
+            if(maxV<fabs(A[i])){
+                maxV = fabs(A[i]);
+            } // THIS WAY ENSURE THAT ZERO DIFF ALWAYS MAPS TO VAL OF 0.5
+            if(minV>A[i]){ minV = A[i]; }
+        }
+        FLT scale = 1./(2*maxV);
+
+        //algortithm needs start of each row, first row begins bottom left
+        std::list<morph::Hex>::iterator blh  = this->Hgrid->findHexNearest(botLeft);
+        std::list<morph::Hex>::iterator h;
+        for (int i=0; i<iRoI; i++) {
+            h = blh;
+            for(int j=0; j<iRoI; j++) {
+                roIField[i][j] = A[(*h).di]*scale;
+                h = h->ne;
+                //std::cout << " h xval " << this->Hgrid->d_x[(*h).di] << " h yval " << this->Hgrid->d_y[(*h).di] << " h.di " << (*h).di << " field " << A[(*h).di] << " roI field " << roIField[i][j] << std::endl;
+            }
+            if (i%2 == 0)
+                blh = blh->nne;
+            else
+                blh = blh->nnw;
+            std::cout << "blh i " << i << " x " << this->Hgrid->d_x[(*blh).vi] << " y " << this->Hgrid->d_y[(*blh).vi] << std::endl;
+        }
+        return roIField;
+    }
+
+
 
 // method to calculate the Laplacian
     vector<complex<FLT>> getLaplacian(vector<complex<FLT>> Q) {
