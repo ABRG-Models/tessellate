@@ -80,6 +80,7 @@ int main (int argc, char **argv)
         float  wratio = conf.getFloat("wratio", 0.844f);
         float  radius = conf.getFloat("radius", 1.0);
         float  ROIwid = conf.getFloat("ROIwid", 1.4);
+        float  lengthScale = conf.getFloat("lengthScale", 29.0f);
 #else
         double dt = conf.getDouble("dt",0.0001);
         double epsilon = conf.getDouble("epsilon",0.1);
@@ -95,6 +96,7 @@ int main (int argc, char **argv)
         double  wratio = conf.getDouble("wratio", 0.844f);
         double radius = conf.getDouble("radius", 1.0);
         double  ROIwid = conf.getDouble("ROIwid", 1.4);
+        double  lengthScale = conf.getDouble("lengthScale", 29.0f);
 #endif
     int scale = conf.getInt("scale",8);
     int numsteps = conf.getInt("numsteps",100);
@@ -169,7 +171,6 @@ int main (int argc, char **argv)
     steady_clock::time_point lastrender = steady_clock::now();
 
 #endif
-    FLT lengthScale = 29.0f;
 // section for solving on the circle Tessllation
     cout << "just before creating  Solver S" << endl;
     //Readjust Dn for a single region

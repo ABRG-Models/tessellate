@@ -29,6 +29,7 @@
     "wratio": 0.867,
     "radius": 2.0,
     "ROIwid": 1.4,
+    "lengthScale": 29.0,
     "overwrite_logs" : 1,
     "skipMorph" : 1,
     "lminradius" : 0,
