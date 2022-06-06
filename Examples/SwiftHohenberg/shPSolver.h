@@ -341,6 +341,7 @@ public:
             psimodsq[i] = zmod*zmod;
             this->nonLocalR[i] = 0.0;
         }
+#pragma omp parallel for
         for (int i=0;i<this->n;i++) {
             for (auto kh: kernel->hexen) {
                 if (convIndex[i][kh.vi] < 0 || convIndex[i][kh.vi] > this->n) {
@@ -366,6 +367,7 @@ public:
             this->nonLocalC[i].real(0.0);
             this->nonLocalC[i].imag(0.0);
         }
+#pragma omp parallel for
         for (int i=0;i<this->n-10;i++) {
             for (auto kh: kernel->hexen) {
                 if (convIndex[i][kh.vi] < 0 || convIndex[i][kh.vi] > this->n) {
