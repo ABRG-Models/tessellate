@@ -150,7 +150,6 @@ public:
         afile << " max x " << Hgrid->getXmax(0.0) << " min x " << Hgrid->getXmin(0.0) << endl;
         afile << "after  filling H in circular constructor" << " n = " << n <<endl;
         N.resize(n);
-        this->IsoORcontours.resize(2,std::vector<FLT>(this->n,0.));
         this->setNoFlux();
         this->nonLocalR.resize(this->n, 0.0);
         this->nonLocalC.resize(this->n, 0.0);
@@ -192,8 +191,6 @@ public:
         afile << "after  filling H in boundary constructor" << " n = " << n <<endl;
       // check the order numbering in hexen
         N.resize(n);
-        this->IsoORcontours.resize(2,std::vector<FLT>(this->n,0.));
-        this->setNoFlux();
         //this->setNoFlux();
         this->psi.resize(n);
         this->nonLocalR.resize(this->n, 0.0);
@@ -240,9 +237,6 @@ public:
         this->phi.resize(this->n);
         this->nonLocalR.resize(this->n, 0.0);
         this->nonLocalC.resize(this->n, 0.0);
-        this->IsoORcontours.resize(2,std::vector<FLT>(this->n,0.));
-        //this->setNoFlux();
-        this->setPeriodic();
         //now set up kernel
         this->sigma = 0.142857;
         this->gNorm = 1.0 /(2.0*PI*sigma*sigma);
@@ -282,8 +276,6 @@ public:
         std::complex<FLT> const zero(0.0, 0.0);
         this->psi.resize(n, zero);
         this->phi.resize(n, zero);
-        this->IsoORcontours.resize(2,std::vector<FLT>(this->n,0.));
-        this->setNoFlux();
         std::cout << "after psi.resize()" << std::endl;
         this->nonLocalR.resize(this->n, 0.0);
         this->nonLocalC.resize(this->n, 0.0);
@@ -975,21 +967,17 @@ public:
         result.resize(invector.size(),false);
         int count = 0;
         for(int di=0; di<this->n; di++) {
-            if (invector[di] > min) {
+            //if (invector[di] > min) {
                 //std::cerr << "val " << invector[di] << " min " << min << std::endl;
-              continue;
-            }
-            if (invector[di] > invector[this->Hgrid->d_ne[di]]  ||
-            invector[di] >= invector[this->Hgrid->d_nne[di]] ||
-            invector[di] >= invector[this->Hgrid->d_nnw[di]] ||
-            invector[di] >= invector[this->Hgrid->d_nw[di]] ||
-            invector[di] >= invector[this->Hgrid->d_nsw[di]] ||
-            invector[di] >= invector[this->Hgrid->d_nse[di]]){
-                result[di] = false;
-            }
-            else {
-                result[di] = true;
-            }
+              //  continue;
+            //}
+            if (invector[di] > invector[this->Hgrid->d_ne[di]]) result[di] = false;
+            else if (invector[di] >= invector[this->Hgrid->d_nne[di]]) result[di] = false;
+            else if (invector[di] >= invector[this->Hgrid->d_nnw[di]]) result[di] = false;
+            else if (invector[di] >= invector[this->Hgrid->d_nw[di]]) result[di] = false;
+            else if (invector[di] >= invector[this->Hgrid->d_nsw[di]]) result[di] = false;
+            else if (invector[di] >= invector[this->Hgrid->d_nse[di]]) result[di] = false;
+            else result[di] = true;
             if (result[di] == true) count++;
         }
         cout << " number of pinwheels " << count << " out of " << this->n << " hexes " << endl;
@@ -997,7 +985,12 @@ public:
     }
 
 
-/*
+    void updateContours(FLT real, FLT imag){
+
+        // Get zero-crossings of the two response difference maps
+        this->IsoORcontours[0] = shapeAn.get_contour_map_flag_nonorm(Out->hg, real, 0.0, 1);
+        this->IsoORcontours[1] = shapeAn.get_contour_map_flag_nonorm(Out->hg, imag, 0.0, 1);
+    }
 
     vector<bool> contour(vector<FLT> invector) {
         vector<bool> result;
@@ -1018,93 +1011,6 @@ public:
         cout << " number of pinwheels " << count << " out of " << this->n << " hexes " << endl;
         return result;
     }
-*/
-
-    std::vector<bool> isContourZeroSpiral(std::vector<FLT> f){
-        std::vector<bool> result (this->n, false);
-        FLT threshold = 0.0;
-        int count = 0;
-        FLT minVal = 100000.0;
-        for (auto h : this->Hgrid->hexen) {
-            if (f[h.vi] < minVal) minVal = f[h.vi];
-            if (h.onBoundary() == false) {
-                if (f[h.vi] >= threshold) {
-                    if ((h.has_ne() && f[h.ne->vi] < threshold)
-                        || (h.has_nne() && f[h.nne->vi] < threshold)
-                        || (h.has_nnw() && f[h.nnw->vi] < threshold)
-                        || (h.has_nw() && f[h.nw->vi] < threshold)
-                        || (h.has_nsw() && f[h.nsw->vi] < threshold)
-                        || (h.has_nse() && f[h.nse->vi] < threshold) ) {
-                        result[h.vi] = true;
-                        count++;
-                    }
-                }
-            }
-        }
-        std::cout << "in isContourZero minVal " << minVal << std::endl;
-        std::cout << "in isContourZero number of hexes on the contour " << count << std::endl;
-        return result;
-    }
-
-    std::vector<bool> isContourZeroPeriodic(std::vector<FLT> f){
-        std::vector<bool> result (this->n, false);
-        FLT threshold = 0.0;
-        int count = 0;
-        FLT minVal = 100000.0;
-        for (int i=0; i<this->n; i++) {
-            if (f[i] < minVal) minVal = f[i];
-            if (f[i] >= threshold) {
-                if (f[this->Hgrid->d_ne[i]] < threshold
-                    || f[this->Hgrid->d_nne[i]] < threshold
-                    || f[this->Hgrid->d_nnw[i]] < threshold
-                    || f[this->Hgrid->d_nw[i]] < threshold
-                    || f[this->Hgrid->d_nsw[i]] < threshold
-                    || f[this->Hgrid->d_nse[i]] < threshold) {
-                    result[i] = true;
-                    count++;
-                }
-            }
-        }
-        std::cout << "in isContourZero minVal " << minVal << std::endl;
-        std::cout << "in isContourZero number of hexes on the contour " << count << std::endl;
-        return result;
-    }
-
-    std::vector<bool> intersectRealImag(std::vector<bool> realZero, std::vector<bool> imagZero) {
-        std::vector<bool> intersects;
-        intersects.resize(this->n,false);
-        //intersects becomes true if intersection of zero real and imaginary contours
-        for(auto h : this->Hgrid->hexen){
-            if ((realZero[h.vi] == true)  && (imagZero[h.vi] == true)) {
-                intersects[h.vi] = true;
-            }
-        }
-
-        // neighbouring intersects for removal (these are fractures)
-        int countSpurious = 0;
-        std::vector<bool> remSelf;
-        remSelf.resize(intersects.size(),false);
-        for(int i=0; i<this->n; i++){
-            if(intersects[this->Hgrid->d_ne[i]]  == true ||
-            intersects[this->Hgrid->d_nne[i]] == true ||
-            intersects[this->Hgrid->d_nnw[i]] == true ||
-            intersects[this->Hgrid->d_nw[i]]  == true ||
-            intersects[this->Hgrid->d_nsw[i]] == true ||
-            intersects[this->Hgrid->d_nse[i]] == 1){
-                countSpurious++;
-                remSelf[i] = true;
-            }
-        }
-        //remove all intersects along fractures
-        for (int i=0; i<this->n; i++) {
-            if (intersects[i] && remSelf[i]) {
-                intersects[i] = false;
-            }
-        }
-        std::cout<<"Spurious crossings removed : "<<countSpurious<<std::endl;
-        return intersects;
-    }
-
 /* function to give r and theta relative to region centre
     pair <FLT,FLT> set_kS_polars(pair<FLT,FLT> centre){
         pair <FLT, FLT> result;
