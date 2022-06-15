@@ -12,25 +12,36 @@ hexGeometry.h which creates geometric objects that are compatible with hexagonal
 
 It has two solver classes
 shSolver.h that solves the Swift-Hohenberg equations with real-valued fields
-shCSolver.h which solves the SH equations for complex-valued fields.
+shPSolver.h which solves the SH equations for complex-valued fields.
 
-each of these has a main program
-sHreal.cpp for real fields
-sHcomplex.cpp for complex fields
+these are driven by main programs
+shReal.cpp for real fields
+shComplex.cpp for complex fields noflux boundary conditions
+shPeriodic.cpp for complex fields with periodic boundary condition
 
 To compile mkdir build; cd build
 then
      cmake ..
 and
-     make sHreal
-     make sHcomplex
+     make shReal
+     make shComplex
+     make shPeriodic
 
 to make the json files
 
-    sh sHrealjson.sh
-    sh sHcomplexjson.sh
+    sh shRealjson.sh
+    sh shComplexjson.sh (both shComplex and shPeriodic use the same json file)
 
 and to run
 
-    python runsHreal.py
-    python runsHcomplex.py
+    python runshReal.py
+    python runshComplex.py
+    python runshPeriodic.py
+
+NOTE: 15/06/2022 There are two different methods in shPSolver.h for identifying the contours
+of zero values for a field of real values on the hexGrid, isCountourZeroPeriodic and
+isContourZeroSpiral. To toggle between which one is used toggle lContourPeriodic in
+shComplexjson.sh. I have included an hdf5 file first.h5 which will allow a warm start so the
+solution does not need to spun up to see the effects. To use this create a directory
+logsSwiftHohenberg at the level in which you run runshPeriodic.py and move first.h5 into this
+directory.
