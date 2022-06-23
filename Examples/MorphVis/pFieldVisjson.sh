@@ -29,25 +29,28 @@
 ## lminRadius: not used in this code
 ## off: not used in this code
 ## plotevery: controls frequency of plotting
+## checkevery: controls frequency of convergence checks
 ## saveplots: if true save plots as .png files
 ## vidframes: if true set plotnames for video creation
 ## win_width: controls size of plotting window
+## fov how much we shrink or magnify the view
 ## NUMPOINTS: number of seed points for Voronoi tessellation
+## diffTol tolerance for convergence
+## lengthScale the lengthscale for the Laplacian operators
 
 
             cat > ./pFieldVis.json <<EOF
 {
     "logpath" : "./logsMorph",
-    "dt": 0.0001,
+    "dt": 0.00005,
     "Dn": $1,
     "Dchi" : $2,
     "Dc" : $3,
     "scale": 8,
     "xspan": 5.0,
-    "numsteps": 100001,
+    "numsteps": 1000000,
     "numAdjust" : 100000,
-    "numprint" : 100,
-    "Lcontinue" : true,
+    "Lcontinue" : false,
     "LfixedSeed" : true,
     "Lgraphics" : true,
     "LDn" : false,
@@ -56,18 +59,21 @@
     "boundaryFalloffDist" : 0.0078,
     "nnInitialOffset" : 1.0,
     "ccInitialOffset" : 2.5,
-    "lengthScale" : 29.0,
     "overwrite_logs" : true,
     "skipMorph" : false,
     "lPerturb" : true,
     "iter" : "0",
     "lminRadius" : false,
     "off" : 1,
-    "plotevery" : 10000,
+    "plotEvery" : 999,
+    "checkEvery" : 999,
     "saveplots" : true,
     "vidframes" : true,
     "win_width" : 2050,
-    "NUMPOINTS" : 41
+    "fov" : 60,
+    "NUMPOINTS" : 41,
+    "diffTol": 1e-10,
+    "lengthScale": 29.0
 }
 EOF
 

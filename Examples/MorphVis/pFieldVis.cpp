@@ -4,13 +4,11 @@
  * that I can compile a version of the binary without plotting, for parameter searches
  * in which I am only going to be saving out HDF5 data.
  */
-#ifdef COMPILE_PLOTTING
 #include <morph/Visual.h>
 #include <morph/HexGridVisual.h>
 #include <morph/ColourMap.h>
 #include <morph/VisualDataModel.h>
 #include <morph/Scale.h>
-#endif
 
 #include "region.h"
 #include "analysis.h"
@@ -127,6 +125,7 @@ int main (int argc, char **argv)
         float aNoiseGain = conf.getFloat("aNoiseGain",0.1);
         float nnInitialOffset = conf.getFloat("nnInitialOffet", 1.0);
         float ccInitialOffset = conf.getFloat("ccInitialOffset",2.5);
+        float diffTol = conf.getFloat("diffTol",1e-8);
         float lengthScale = conf.getFloat("lengthScale",29.0f);
 #else
         double dt = conf.getDouble("dt",0.0001);
@@ -138,47 +137,47 @@ int main (int argc, char **argv)
         double aNoiseGain = conf.getDouble("aNoiseGain",0.1);
         double nnInitialOffset = conf.getDouble("nnInitialOffet", 1.0);
         double ccInitialOffset = conf.getDouble("ccInitialOffset",2.5);
+        double diffTol = conf.getDouble("diffTol",1e-8);
         double lengthScale = conf.getDouble("lengthScale",29.0);
 #endif
     int numSectors = conf.getInt("numsectors",12);
     int scale = conf.getInt("scale",8);
-    int numsteps = conf.getInt("numsteps",100);
-    int numprint = conf.getInt("numprint",100);
+    unsigned int numsteps = conf.getUInt("numsteps",1000000);
+    int plotEvery = conf.getInt("plotEvery",1000);
+    int checkEvery = conf.getInt("checkEvery",1000);
+    int fov = conf.getInt("fov",50);
     string logpath = conf.getString("logpath", "./logsMorph") ;
     string iter = conf.getString("iter","0");
     bool LfixedSeed = conf.getBool("LfixedSeed",0);
-    bool LDn = conf.getBool("LDn",0);
+    bool LDn = conf.getBool("LDn",false);
     //bool overwrite_logs = conf.getBool("overwrite_logs",true);
     bool skipMorph  = conf.getBool("skipMorph",false);
     bool Lcontinue = conf.getBool("Lcontinue",false);
     unsigned int numpoints = conf.getInt("numpoints",41);
+    unsigned int framecount = 0;
     cout << " Lcontinue " << Lcontinue << " skipMorph " << skipMorph << endl;
     ofstream afile (logpath + "/centroids.out",ios::app);
-    // adjust the number of steps according to the Dn number
-    //numsteps = numsteps * floor(sqrt(36.0/Dn));
-    //numprint  = numprint * floor(sqrt(36.0/Dn));
-    // adjust the time step for the Dn values
-    //dt = dt * sqrt(Dn/36.0);
-    //set up a vtxVisual pointer
+#ifdef COMPILE_PLOTTING
     vtxVisual* cv;
+#endif
 
-    unsigned int seed;
-    if (LfixedSeed) {
-        seed = 1;
-    }
-    else {
-        seed = time(NULL);
-    }
 
     // A ra2yyndo2yym uniform generator returning real/FLTing point types
-    morph::RandUniform<FLT> ruf(seed);
     ofstream gfile ( logpath + "/edges.out");
     ofstream jfile ( logpath + "/results.txt");
     ofstream degfile1 (logpath + "/degree1.data");
     ofstream degfile2 (logpath + "/degree2.data");
     ofstream degfile3 (logpath + "/degree3.data");
 
+    //set seed
+    unsigned int seed;
+    chrono::milliseconds ms1 = duration_cast<milliseconds>(system_clock::now().time_since_epoch());
+    if (LfixedSeed)
+        seed = 1;
+    else
+        seed = static_cast<unsigned int> (ms1.count());
 
+    morph::RandUniform<FLT> ruf(seed);
 // initialise DRegion class setting scale
     DRegion M(scale,xspan,logpath,numpoints); //create tessellation
     M.setCreg(); //set counts to identify inner boundaries
@@ -253,17 +252,12 @@ int main (int argc, char **argv)
     cout << "just before populating the inner regions Morph 0" << endl;
     for (unsigned int j=0;j<numpoints;j++)
     {
-        if (M.innerRegion[j]) {
             M.renewRegion(j,S[j].Hgrid->hexen);
-        }
     }
     cout << "just before populating the inner boundary Morph 0" << endl;
     for (unsigned int j=0;j<numpoints;j++)
     {
-        if (M.innerRegion[j]) {
             M.renewBoundary(j,S[j].Hgrid->hexen);
-        }
-        //M.renewCentroids(j);
     }
     cout << "just before calculating regionSize " << endl;
     for (unsigned int j=0; j<numpoints;j++){
@@ -275,9 +269,7 @@ int main (int argc, char **argv)
     cout << "just before renewDissect first time" << endl;
     for (unsigned int j=0;j<numpoints;j++)
     {
-        if (M.innerRegion[j]) {
             M.renewDissect(j,0);
-        }
     }
     cout << "Edges size " << M.edges.size() << endl;
  #ifdef COMPILE_PLOTTING
@@ -285,13 +277,11 @@ int main (int argc, char **argv)
     FLT hexWidth = M.Hgrid->hexen.begin()->d/2.0;
     cerr << "d/2: " << hexWidth << endl;
     // Parameters from the config that apply only to plotting:
-    const unsigned int plotevery = conf.getUInt ("plotevery", 10);
     // Should the plots be saved as png images?
-    const bool saveplots = conf.getBool ("saveplots", true);
+    //const bool saveplots = conf.getBool ("saveplots", true);
     // If true, then write out the logs in consecutive order numbers,
     // rather than numbers that relate to the simulation timestep.
-    const bool vidframes = conf.getBool ("vidframes", false);
-    unsigned int framecount = 0;
+    const bool vidframes = conf.getBool ("vidframes", true);
 
     // Window width and height
     const unsigned int win_width = conf.getUInt ("win_width", 2050UL);
@@ -313,7 +303,7 @@ int main (int argc, char **argv)
     v1->zNear = 0.001;
     v1->zFar = 100;
     // And the field of view of the visual scene.
-    v1->fov = 40;
+    v1->fov = fov;
     // You can lock movement of the scene
     v1->sceneLocked = conf.getBool ("sceneLocked", false);
     // You can set the default scene x/y/z offsets
@@ -328,6 +318,7 @@ int main (int argc, char **argv)
 
     // if using plotting, then set up the render clock
     steady_clock::time_point lastrender = steady_clock::now();
+/*
 // to draw the tessellation
 // first convert M.vCoords into a morph::Vect
     cout << "just beofere creating vtxVector" << endl;
@@ -345,8 +336,8 @@ int main (int argc, char **argv)
     cout << " after creating vtxVisual " << endl;
     cv->finalize();
     cout << " after vtxVisual finalize " << endl;
-    cv->addLabel("Tessellation morph 0", {0.0f, 1.1f, 0.0f});
-    //v1->addVisualModel(cv);
+    cv->addLabel("Tessellation morph 0", {0.4f, 1.5, 0.0f});
+    v1->addVisualModel(cv);
     cout << "before rendering v1 " << endl;
     v1->render();
     cout << "after rendering v1 " << endl;
@@ -354,11 +345,11 @@ int main (int argc, char **argv)
     frame << "log/agent/";
     frame.width(4);
     frame.fill('0');
-    //frame << framenum++;
+    frame << framenum++;
     frame << ".png";
     cout << " before save image " << endl;
     savePngs (logpath, "tessellation0", 0, *v1);
-
+*/
 
 #endif
 
@@ -419,7 +410,7 @@ int main (int argc, char **argv)
     float xzero = 0.0f;
 
     // A. Offset in x direction to the left.
-    xzero = 0.4 * M.Hgrid->width();
+    xzero = 0.5 * M.Hgrid->width();
     spatOff = { xzero, 0.0, 0.0 };
     // Z position scaling - how hilly/bumpy the visual will be.
     Scale<FLT,float> zscale; zscale.setParams (0.0f, 0.0f);
@@ -428,8 +419,12 @@ int main (int argc, char **argv)
 
     unsigned int Agrid[numpoints];
 
+    v1->addLabel("Laplacian", {0.4f, 1.3f, 0.0f});
+    v1->addLabel("Field", {-0.4f, 1.3f, 0.0f});
     for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
+#ifdef RANDOM
         if (M.innerRegion[j]) {
+#endif
             vector<FLT> regionNN;
             //normalise over the region t
             regionNN = L.normalise(S[j].NN);
@@ -441,16 +436,20 @@ int main (int argc, char **argv)
                                                                     zscale,
                                                                     cscale,
                                                                     morph::ColourMapType::Jet));
+#ifdef RANDOM
         }//end of loop on inner regions
+#endif
     }//end of loop over regions
 
     // A. Offset in x direction to the left.
-    xzero -= 0.8 * M.Hgrid->width();
+    xzero -= 1.0 * M.Hgrid->width();
     spatOff = { xzero, 0.0, 0.0 };
     // Z position scaling - how hilly/bumpy the visual will be.
     unsigned int Bgrid[numpoints];
     for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
+#ifdef RANDOM
         if (M.innerRegion[j]) {
+#endif
             vector<FLT> regionNN;
             //normalise over the region t
             regionNN = L.normalise(S[j].NN);
@@ -461,22 +460,58 @@ int main (int argc, char **argv)
                                                                     &(regionNN),
                                                                     zscale,
                                                                     cscale,
-                                                                    morph::ColourMapType::Jet));
+                                                               morph::ColourMapType::Jet));
+#ifdef RANDOM
         }//end of loop on inner regions
+#endif
     }//end of loop over regions
 #endif
+    // begin time stepping loop unmorphed grid solved via schSolver
+    // set up vectors for determining convergence
+    std::vector<FLT> NNdiff;
+    std::vector<std::vector<FLT>> NNpre;
+    std::vector<std::vector<FLT>> NNcurr;
+    NNdiff.resize(numpoints);
+    NNpre.resize(numpoints);
+    NNcurr.resize(numpoints);
+    FLT NNdiffSum = 0.0f;
+  //initilise all Apre vectors to above possible field
+    if (!Lcontinue){
+        for (unsigned int j=0; j<numpoints;j++) {
+            NNpre[j].resize(S[j].NN.size(),10000.0);
+        }
+    }
+    else {
+        for (unsigned int j=0; j<numpoints; j++) {
+            NNpre[j] = S[j].NN;
+        }
+    }
     // begin morph0 time stepping loop
-    for (int i=0;i<numsteps;i++) {
-   	    for (unsigned int j = 0;j<numpoints;j++) { //loop over all regions, only step internal ones
-            if (M.innerRegion[j]) {
-                S[j].stepEuler(dt, Dn, Dchi, Dc);
+    for (unsigned int i=0;i<numsteps;i++) {
+   	for (unsigned int j = 0;j<numpoints;j++) { //loop over all regions
+            S[j].stepEuler(dt, Dn, Dchi, Dc);
+            if (i%checkEvery == 0) {
+                NNdiffSum = 0.0;
+                NNcurr[j] = S[j].NN;
+                NNdiff[j] = L.normedDiff(NNpre[j], NNcurr[j]);
+                NNpre[j] = NNcurr[j];
+                NNdiffSum += fabs(NNdiff[j]);
+            }
+        } //end of loop over regions
+        if (i%checkEvery == 0) {
+            cerr << "NNdiffSum " << NNdiffSum << " i = " << i << endl;
+            if (NNdiffSum/(numpoints*1.0) < diffTol) {
+                cout << "morphed converged step " << i << " field diff " << NNdiffSum/(1.0*numpoints) << " diffTol " << diffTol << std::endl;
+                break;
             }
         }
 #ifdef COMPILE_PLOTTING
-        if ((i % numprint) == 0) {
+        if ((i % plotEvery) == 0) {
             cout << "step " << i << " reached" << endl;
             for (unsigned int j=0; j<numpoints;j++) {
+#ifdef RANDOM
                 if (M.innerRegion[j]) { //only display inner regions
+#endif
                     vector<FLT> regionNN;
                     regionNN = L.normalise(S[j].lapNN);
                     VisualDataModel<FLT>* avm = (VisualDataModel<FLT>*)v1->getVisualModel (Agrid[j]);
@@ -486,19 +521,19 @@ int main (int argc, char **argv)
                     VisualDataModel<FLT>* avm1 = (VisualDataModel<FLT>*)v1->getVisualModel (Bgrid[j]);
                     avm1->updateData (&regionNN);
                     avm1->clearAutoscaleColour();
-                    if (i%plotevery == 0) {
-                        std::cerr << std::setprecision(16) << " NN " << S[j].sum_NN << " lapNN " << S[j].sum_lapNN << " step " << i << " plotevery " << plotevery << std::endl;
+                    if (i%plotEvery == 0) {
+                        std::cerr << std::setprecision(16) << " NN " << S[j].sum_NN << " lapNN " << S[j].sum_lapNN << " step " << i << " plotEvery " << plotEvery << std::endl;
                     }
-                }
+#ifdef RANDOM
+                }//end of if on inner regions
+#endif
             }
-            if (i%plotevery == 0) {
-                if (vidframes) {
-                    savePngs (logpath, "nn0", framecount, *v1);
-                    ++framecount;
-                }
-                else {
-                    savePngs (logpath, "nn0", i , *v1);
-                }
+            if (vidframes) {
+                savePngs (logpath, "nn0", framecount, *v1);
+                ++framecount;
+            }
+            else {
+                savePngs (logpath, "nn0", i , *v1);
             }
         }
         // rendering the graphics. After each simulation step, check if enough time
@@ -509,10 +544,10 @@ int main (int argc, char **argv)
             v1->render();
             lastrender = steady_clock::now();
         }
-    }
-  //  cerr << "Ctrl-c or press x in graphics window to exit.\n";
-  //  v1->keepOpen();
+        //cerr << "Ctrl-c or press x in graphics window to exit.\n";
+        //v1->keepOpen();
 #endif
+    }//end of time stepping
     //code run at end of timestepping
     //first save the  ofstream outFile;
     cout << "just before first data write morph 0" << endl;
@@ -556,7 +591,9 @@ int main (int argc, char **argv)
     const int max_comp = numpoints*3;
     for (unsigned int j=0;j<numpoints;j++) {
         M.NN[j] = S[j].NN; //write the NN fields to the DRegion array
+#ifdef RANDOM
         if (M.innerRegion[j]){
+#endif
 			int regionCount = 0;
             gfile<<"in the degree loop" << endl;
             //angle degree
@@ -595,7 +632,9 @@ int main (int argc, char **argv)
 		    }
             gfile <<  " region "<< j << " degreeRadius  "<< degreeRadius << "  " <<endl << endl;
             regionCount++;
+#ifdef RANDOM
         } //end of if on non-zero regions
+#endif
     } //end of loop on NUMPOINT
 
 
@@ -611,7 +650,9 @@ int main (int argc, char **argv)
 		  M.random_correlate(max_comp, 1);
 		  cout << "just after randomcorrelate_edges morph1 " << endl;
           for (unsigned int j=0;j<numpoints;j++) {
+#ifdef RANDOM
 	        if (M.innerRegion[j]) {
+#endif
 	          countRegions++;
 		      occupancy += M.regNNfrac(j);
               tempArea = M.regArea(j);
@@ -626,9 +667,10 @@ int main (int argc, char **argv)
               radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors/2, S[j].NN);
               degreeRadius = L.find_zeroDRadius(radiusDVector);
               avDegreeRadius += degreeRadius;
-
               degfile1 << degreeAngle/2 << " " << degreeRadius << " " << M.regNNfrac(j) << " " << tempArea << " "<< tempPerimeter<<endl<<flush;
+#ifdef RANDOM
 	       } //end of if on non-zero regions
+#endif
 	    } //end of loop on NUMPOINTs
       if (countRegions == 0) {
           cout << "Error zero regionss counted in second analysis morph 0" << endl;
@@ -686,16 +728,12 @@ int main (int argc, char **argv)
     cout << "just before populating the inner regions morph 1" << endl;
     for (unsigned int j=0;j<numpoints;j++)
     {
-        if (M.innerRegion[j]) {
             M.renewRegion(j,S[j].Hgrid->hexen);
-        }
     }
     cout << "just before populating the inner boundary morph 1" << endl;
     for (unsigned int j=0;j<numpoints;j++)
     {
-        if (M.innerRegion[j]) {
             M.renewBoundary(j,S[j].Hgrid->hexen);
-        }
     }
     cout << "second setting of centroids" << endl;
     for (unsigned int j=0; j<numpoints;j++){
@@ -779,7 +817,7 @@ int main (int argc, char **argv)
     v2->zNear = 0.001;
     v2->zFar = 500;
     // And the field of view of the visual scene.
-    v2->fov = 40;
+    v2->fov = fov;
     // You can lock movement of the scene
     v2->sceneLocked = conf.getBool ("sceneLocked", false);
     // You can set the default scene x/y/z offsets
@@ -794,7 +832,7 @@ int main (int argc, char **argv)
     cout << " after creating vtxVisual " << endl;
     cv->finalize();
     cout << " after vtxVisual finalize " << endl;
-    cv->addLabel("Tessellation morph 1", {0.0f, 1.1f, 0.0f});
+    cv->addLabel("Tessellation morph 1", {0.4f, 1.4f, 0.0f});
     v2->addVisualModel(cv);
     cout << "before rendering v2 " << endl;
     v2->render();
@@ -802,15 +840,14 @@ int main (int argc, char **argv)
     frame << "log/agent/";
     frame.width(4);
     frame.fill('0');
-    //frame << framenum++;
+    frame << framenum++;
     frame << ".png";
     cout << " before save image " << endl;
     savePngs (logpath, "tessellation1", 0, *v2);
-    */
     v2->setCurrent();
-
+*/
     // A. Offset in x direction to the left.
-    xzero = 0.4 * M.Hgrid->width();
+    xzero = 0.5 * M.Hgrid->width();
     spatOff = { xzero, 0.0, 0.0 };
     // Z position scaling - how hilly/bumpy the visual will be.
     //Scale<FLT,float> zscale; zscale.setParams (0.0f, 0.0f);
@@ -819,8 +856,12 @@ int main (int argc, char **argv)
 
     unsigned int Cgrid[numpoints];
 
+    v2->addLabel("Laplacian", {0.4f, 1.3f, 0.0f});
+    v2->addLabel("Field", {-0.4f, 1.3f, 0.0f});
     for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
+#ifdef RANDOM
         if (M.innerRegion[j]) {
+#endif
             vector<FLT> regionNN;
             //normalise over the region t
             regionNN = L.normalise(S[j].NN);
@@ -832,16 +873,20 @@ int main (int argc, char **argv)
                                                                     zscale,
                                                                     cscale,
                                                                     morph::ColourMapType::Jet));
+#ifdef RANDOM
         }//end of loop on inner regions
+#endif
     }//end of loop over regions
 
     // A. Offset in x direction to the left.
-    xzero -= 0.8 * M.Hgrid->width();
+    xzero -= 1.0 * M.Hgrid->width();
     spatOff = { xzero, 0.0, 0.0 };
     // Z position scaling - how hilly/bumpy the visual will be.
     unsigned int Dgrid[numpoints];
     for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
+#ifdef RANDOM
         if (M.innerRegion[j]) {
+#endif
             vector<FLT> regionNN;
             //normalise over the region t
             regionNN = L.normalise(S[j].NN);
@@ -853,23 +898,51 @@ int main (int argc, char **argv)
                                                                     zscale,
                                                                     cscale,
                                                                     morph::ColourMapType::Jet));
+#ifdef RANDOM
         }//end of loop on inner regions
+#endif
     }//end of loop over regions
 #endif
-    // begin third time stepping loop after first morph
+    // begin second time stepping loop after first morph
     std::cout << "before time stepping loop morph 1" << std::endl;
-    for (int i=0;i<numsteps;i++) {
-        //std::cout << "in time stepping loop i " << i  << std::endl;
-   	for (unsigned int j = 0;j<numpoints;j++){ //loop over regions, only set internal ones
-             S[j].stepEuler(dt, DnVal[j], DchiVal[j], DcVal[j]);
-            //S[j].step(dt, Dn, Dchi, Dc);
-            //std::cout << "after stepping region " << j << std::endl;
+    NNdiff.resize(numpoints);
+    NNpre.resize(numpoints);
+    NNcurr.resize(numpoints);
+    NNdiffSum = 0.0;
+
+    //initilise all Apre vectors to above possible field
+    for (unsigned int j=0; j<numpoints;j++) {
+        NNpre[j].resize(S[j].NN.size(),1000.0);
+    }
+    //reset framecount
+    framecount = 0;
+    //start of time-stepping loo
+    for (unsigned int i=0;i<numsteps;i++) {
+        for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
+            S[j].stepEuler(dt, Dn, Dchi, Dc);
+            if (i%checkEvery == 0) {
+                NNdiffSum = 0.0;
+                NNcurr[j] = S[j].NN;
+                NNdiff[j] = L.normedDiff(NNpre[j], NNcurr[j]);
+                NNpre[j] = NNcurr[j];
+                NNdiffSum += NNdiff[j];
+            }
         }
+        if (i%checkEvery == 0) {
+            cerr << "NNdiffSum " << NNdiffSum << " i = " << i << endl;
+            if (NNdiffSum/(numpoints*1.0) < diffTol) {
+                cout << "morphed converged step " << i << " field diff " << NNdiffSum/(1.0*numpoints) << " diffTol " << diffTol << std::endl;
+                break;
+            }
+        }
+
 #ifdef COMPILE_PLOTTING
-        if ((i % numprint) == 0) {
-            std::cout << "in plotevery of time loop i " << i << std::endl;
+        if ((i % plotEvery) == 0) {
+            std::cout << "in plotEvery of time loop i " << i << std::endl;
             for (unsigned int j=0; j<numpoints;j++) {
+#ifdef RANDOM
                 if (M.innerRegion[j]) { //only display inner regions
+#endif
                     vector<FLT> regionNN;
                     regionNN = L.normalise(S[j].lapNN);
                     VisualDataModel<FLT>* avm = (VisualDataModel<FLT>*)v2->getVisualModel (Cgrid[j]);
@@ -879,17 +952,17 @@ int main (int argc, char **argv)
                     VisualDataModel<FLT>* avm1 = (VisualDataModel<FLT>*)v2->getVisualModel (Dgrid[j]);
                     avm1->updateData (&regionNN);
                     avm1->clearAutoscaleColour();
+    #ifdef RANDOM
                 }
+    #endif
             }
             v2->render();
-            if (saveplots && (i%plotevery == 0)) {
-                if (vidframes) {
-                    savePngs (logpath, "nn1", framecount, *v2);
-                    ++framecount;
-                }
-                else {
-                    savePngs (logpath, "nn1", i , *v2);
-                }
+            if (vidframes) {
+                savePngs (logpath, "nn1", framecount, *v2);
+                ++framecount;
+            }
+            else {
+                savePngs (logpath, "nn1", i , *v2);
             }
         }
         // rendering the graphics. After each simulation step, check if enough time
@@ -900,8 +973,8 @@ int main (int argc, char **argv)
         //    v2->render();
         //    lastrender = steady_clock::now();
         //}
-    }
 #endif
+    } //end of numsteps loop
     //code run at end of timestepping
     //first save the  ofstream outFile;
     cout << "just before second data read " << endl;
@@ -934,7 +1007,9 @@ int main (int argc, char **argv)
     radiusVector.resize(0);
       for (unsigned int j=0;j<numpoints;j++) {
           M.NN[j] = S[j].NN; // first fill the DRegion NN values
+#ifdef RANDOM
               if (M.innerRegion[j]){
+#endif
 			      int regionCount = 0;
                   gfile<<"in the degree loop" << endl;
                   //angle degree
@@ -977,7 +1052,9 @@ int main (int argc, char **argv)
 
 
                   regionCount++;
+#ifdef RANDOM
         } //end of if on non-zero regions
+#endif
     } //end of loop on NUMPOINT
 
 
@@ -988,9 +1065,7 @@ int main (int argc, char **argv)
     cout << "just before renewDissect second time" << endl;
     for (unsigned int j=0;j<numpoints;j++)
     {
-        if (M.innerRegion[j]) {
             M.renewDissect(j,1);
-        }
     }
     cout << "Edges size " << M.edges.size() << endl;
 
@@ -1005,8 +1080,10 @@ int main (int argc, char **argv)
 		  M.random_correlate(max_comp,2);
 		  cout << "just after randomcorrelate_edges morph1 " << endl;
           for (unsigned int j=0;j<numpoints;j++) {
+#ifdef RANDOM
 	        if (M.innerRegion[j])
 			{
+#endif
 	          countRegions++;
 		      occupancy += M.regNNfrac(j);
               tempArea = M.regArea(j);
@@ -1023,7 +1100,9 @@ int main (int argc, char **argv)
               avDegreeRadius += degreeRadius;
 
               degfile2 << degreeAngle/2 << " " << degreeRadius << " " << M.regNNfrac(j) << " " << tempArea << " "<< tempPerimeter<<endl<<flush;
+    #ifdef RANDOM
 	       } //end of if on non-zero regions
+    #endif
 	    } //end of loop on NUMPOINTs
       if (countRegions == 0) {
           cout << "Error zero regionss counted in third analysis morph 1" << endl;
@@ -1051,16 +1130,12 @@ int main (int argc, char **argv)
 	// repopulate the regions
     for (unsigned int j=0;j<numpoints;j++)
     {
-        if (M.innerRegion[j]) {
             M.renewRegion(j,S[j].Hgrid->hexen);
-        }
     }
     cout << "after repopulate regions morph2" << endl;
     for (unsigned int j=0;j<numpoints;j++)
     {
-        if (M.innerRegion[j]) {
             M.renewBoundary(j,S[j].Hgrid->hexen);
-        }
         //M.renewCentroids(j);
     }
     cout << "after repopulate boundary morph2" << endl;
@@ -1070,9 +1145,7 @@ int main (int argc, char **argv)
     // redissect the boundaries
     for (unsigned int j=0;j<numpoints;j++)
     {
-        if (M.innerRegion[j]) {
             M.renewDissect(j,2);
-        }
     }
     cout << "Edges size " << M.edges.size() << endl;
     for (unsigned int j = 0;j<numpoints;j++) {
@@ -1151,11 +1224,11 @@ int main (int argc, char **argv)
     v3->zNear = 0.001;
     v3->zFar = 500;
     // And the field of view of the visual scene.
-    v3->fov = 40;
+    v3->fov = fov;
     // You can lock movement of the scene
     v3->sceneLocked = conf.getBool ("sceneLocked", false);
     // You can set the default scene x/y/z offsets
-    v3->setZDefault (conf.getFloat ("z_default", -5.0f));
+    v3->setZDefault (conf.getFloat ("z_default", 0.0f));
     v3->setSceneTransXY (conf.getFloat ("x_default", 0.0f),
                         conf.getFloat ("y_default", 0.0f));
     // Make this larger to "scroll in and out of the image" faster
@@ -1167,21 +1240,18 @@ int main (int argc, char **argv)
     cout << " after creating vtxVisual " << endl;
     cv->finalize();
     cout << " after vtxVisual finalize " << endl;
-    cv->addLabel("Tessellation morph 2", {0.0f, 1.1f, 0.0f});
+    cv->addLabel("Tessellation morph 2", {0.4f, 1.4f, 0.0f});
     v3->addVisualModel(cv);
-    */
     frame << "log/agent/";
     frame.width(4);
     frame.fill('0');
-    //frame << framenum++;
+    frame << framenum++;
     frame << ".png";
-    cout << " before save image " << endl;
-    savePngs (logpath, "tessellation2", 0, *v3);
     v3->setCurrent();
-    //v3->render();
-
+    v3->render();
+*/
     // A. Offset in x direction to the left.
-    xzero = 0.4 * M.Hgrid->width();
+    xzero = 0.5 * M.Hgrid->width();
     spatOff = { xzero, 0.0, 0.0 };
     // Z position scaling - how hilly/bumpy the visual will be.
     //zscale; zscale.setParams (0.0f, 0.0f);
@@ -1190,8 +1260,12 @@ int main (int argc, char **argv)
 
     unsigned int Egrid[numpoints];
 
+    v3->addLabel("Laplacian", {0.4f, 1.3f, 0.0f});
+    v3->addLabel("Field", {-0.4f, 1.3f, 0.0f});
     for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
+#ifdef RANDOM
         if (M.innerRegion[j]) {
+#endif
             vector<FLT> regionNN;
             //normalise over the region t
             regionNN = L.normalise(S[j].NN);
@@ -1203,16 +1277,20 @@ int main (int argc, char **argv)
                                                                     zscale,
                                                                     cscale,
                                                                     morph::ColourMapType::Jet));
+#ifdef RANDOM
         }//end of loop on inner regions
+#endif
     }//end of loop over regions
 
     // A. Offset in x direction to the left.
-    xzero -= 0.8 * M.Hgrid->width();
+    xzero -= 1.0 * M.Hgrid->width();
     spatOff = { xzero, 0.0, 0.0 };
     // Z position scaling - how hilly/bumpy the visual will be.
     unsigned int Fgrid[numpoints];
     for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
+#ifdef RANDOM
         if (M.innerRegion[j]) {
+#endif
             vector<FLT> regionNN;
             //normalise over the region t
             regionNN = L.normalise(S[j].NN);
@@ -1224,62 +1302,90 @@ int main (int argc, char **argv)
                                                                     zscale,
                                                                     cscale,
                                                                     morph::ColourMapType::Jet));
+#ifdef RANDOM
         }//end of loop on inner regions
+#endif
     }//end of loop over regions
 #endif
 
      //begin fourth time stepping loop after second morph
-    int loopsteps = 0;
-    for (int i=0;i<numsteps;i++) {
+    NNdiff.resize(numpoints);
+    NNpre.resize(numpoints);
+    NNcurr.resize(numpoints);
+    NNdiffSum = 0.0;
+
+    //initilise all Apre vectors to above possible field
+    for (unsigned int j=0; j<numpoints;j++) {
+        NNpre[j].resize(S[j].NN.size(),1000.0);
+    }
+
+    //reset framecount
+    framecount = 0;
+
+    for (unsigned int i=0;i<numsteps;i++) {
         for (unsigned int j = 0;j<numpoints;j++) {
-            S[j].stepEuler(dt, DnVal[j], DchiVal[j], DcVal[j]);
-        }
-#ifdef COMPILE_PLOTTING
-        if((i % numprint) == 0) {
-            for (unsigned int j=0; j<numpoints;j++) {
-                if (M.innerRegion[j]) { //only display inner regions
-                    vector<FLT> regionNN;
-                    regionNN = L.normalise(S[j].lapNN);
-                    VisualDataModel<FLT>* avm = (VisualDataModel<FLT>*)v3->getVisualModel (Egrid[j]);
-                    avm->updateData (&regionNN);
-                    avm->clearAutoscaleColour();
-                    regionNN = L.normalise(S[j].NN);
-                    VisualDataModel<FLT>* avm1 = (VisualDataModel<FLT>*)v3->getVisualModel (Fgrid[j]);
-                    avm1->updateData (&regionNN);
-                    avm1->clearAutoscaleColour();
-                    if (saveplots && (i % plotevery == 0)) {
-                        if (vidframes) {
-                            savePngs (logpath, "nn2", framecount, *v3);
-                             ++framecount;
-                        }
-                        else {
-                             savePngs (logpath, "nn2", i , *v3);
-                        }
-                    }
-                }
+            S[j].stepEuler(dt, Dn, Dchi, Dc);
+            if (i%checkEvery == 0) {
+                NNdiffSum = 0.0;
+                NNcurr[j] = S[j].NN;
+                NNdiff[j] = L.normedDiff(NNpre[j], NNcurr[j]);
+                cout << "nomm NNpre " << L.vectNorm(NNpre[j]) << " normCurr " << L.vectNorm(NNcurr[j]) << " diff " << NNdiff[j] << endl;
+                NNpre[j] = NNcurr[j];
+                NNdiffSum += NNdiff[j];
             }
         }
-        /*
-   	        // rendering the graphics. After each simulation step, check if enough time
-            // has elapsed for it to be necessary to call v3.render().
-            cout << " before rendering the graphics " << endl;
-            v3->render();
-            cout << " after rendering the graphics " << endl;
-            savePngs (logpath, "nnField2", 0, *v3);
-         */
+    if (i%checkEvery == 0) {
+        cerr << "NNdiffSum " << NNdiffSum << " i = " << i << endl;
+        if (NNdiffSum/(numpoints*1.0) < diffTol) {
+            cout << "morphed converged step " << i << " field diff " << NNdiffSum/(1.0*numpoints) << " diffTol " << diffTol << std::endl;
+            break;
+        }
+    }
+#ifdef COMPILE_PLOTTING
+    if((i % plotEvery) == 0) {
+        for (unsigned int j=0; j<numpoints;j++) {
+#ifdef RANDOM
+            if (M.innerRegion[j]) { //only display inner regions
+#endif
+                vector<FLT> regionNN;
+                regionNN = L.normalise(S[j].lapNN);
+                VisualDataModel<FLT>* avm = (VisualDataModel<FLT>*)v3->getVisualModel (Egrid[j]);
+                avm->updateData (&regionNN);
+                avm->clearAutoscaleColour();
+                regionNN = L.normalise(S[j].NN);
+                VisualDataModel<FLT>* avm1 = (VisualDataModel<FLT>*)v3->getVisualModel (Fgrid[j]);
+                avm1->updateData (&regionNN);
+                avm1->clearAutoscaleColour();
+#ifdef RANDOM
+            }
+#endif
+        }
+   	// rendering the graphics. After each simulation step, check if enough time
+        // has elapsed for it to be necessary to call v3.render().
+        cout << " before rendering the graphics " << endl;
+        v3->render();
+        if (vidframes) {
+            savePngs (logpath, "nn2", framecount, *v3);
+            ++framecount;
+        }
+        else {
+            savePngs (logpath, "nn2", i , *v3);
+        }
+        cout << " after rendering the graphics " << endl;
+    }
 
         // rendering the graphics. After each simulation step, check if enough time
         // has elapsed for it to be necessary to call v3.render().
-        steady_clock::duration sincerender = steady_clock::now() - lastrender;
-        if (duration_cast<milliseconds>(sincerender).count() > 17000) { // 17 is about 60 Hz
-            glfwPollEvents();
-            v3->render();
-            lastrender = steady_clock::now();
-        }
-    }
+     //   steady_clock::duration sincerender = steady_clock::now() - lastrender;
+     //   if (duration_cast<milliseconds>(sincerender).count() > 17000) { // 17 is about 60 Hz
+     //       glfwPollEvents();
+     //       v3->render();
+     //       lastrender = steady_clock::now();
+    //}
 #endif
+} //end of numsteps loop
+
     //
-	cout << "after third time stepping loop " << loopsteps << endl;
        //nndisp.closeDisplay();
     //code run at end of timestepping
     cout << "just before the fourth data write" << endl;
@@ -1311,7 +1417,9 @@ int main (int argc, char **argv)
     radiusVector.resize(0);
     for (unsigned int j=0;j<numpoints;j++) {
         M.NN[j] = S[j].NN;
+#ifdef RANDOM
 	    if (M.innerRegion[j]) {
+#endif
 	        int regionCount = 0;
             gfile<<"in the degree loop" << endl;
 	        //angle degree
@@ -1346,7 +1454,9 @@ int main (int argc, char **argv)
 		    }
             gfile <<  " region "<< j << " degreeRadius  "<< degreeRadius << "  " <<endl << endl;
             regionCount++;
+#ifdef RANDOM
         } //end of if on non-zero regions
+#endif
     } //end of loop on NUMPOINT
 
 //computing average values over all regions
@@ -1364,7 +1474,9 @@ int main (int argc, char **argv)
     angleVector.resize(0);
     radiusVector.resize(0);
     for (unsigned int j=0;j<numpoints;j++) {
+#ifdef RANDOM
 	    if (M.innerRegion[j]){
+#endif
             countRegions++;
             avAbsCorrelation += M.renewcorrelate_edges(j,3);
             occupancy += M.regNNfrac(j);
@@ -1385,7 +1497,9 @@ int main (int argc, char **argv)
             degreeRadius = L.find_zeroDRadius(radiusDVector);
             avDegreeRadius += degreeRadius;
             degfile3 << degreeAngle << " " << degreeRadius << " " << M.regNNfrac(j) << " " << tempArea << " " << tempPerimeter<<endl<<flush;
+#ifdef RANDOM
          } //end of if on non-zero regions
+#endif
     } //end of loop on NUMPOINTs
     if (countRegions == 0) {
         cout << "Error zero regionss counted in fourth analysis morph 2" << endl;
