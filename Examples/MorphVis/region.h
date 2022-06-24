@@ -34,7 +34,6 @@
 #define HEX_GEOM
 #include "hexGeometry.h"
 #endif
-#include <boost/math/special_functions/bessel.hpp>
 #define PI 3.1415926535897932
 
 using std::vector;
@@ -2892,24 +2891,6 @@ FLT regnnfrac (int regNum) {
         }
         cout << " region " << regNum << " bound size " <<regionBound[regNum].size() << endl;
         return;
-    }
-
-    int regionBessel(int regNum, int radialOrder, int angularOrder, FLT phase, FLT Dn=1.0) {
-        int numHexes = 0;
-        for (auto h : this->regionHex[regNum]) {
-            FLT radius = h.r * (1.0 * Dn + 1.0);
-            FLT angle = 0;
-            //cout << "In regionBessel after r and before phi " << h.vi << endl;
-            if (h.phi >= phase)
-                angle = h.phi - phase;
-            else
-                angle = h.phi + 2.0 * PI - phase;
-            //cout << "In regionBessel hex before Bessel call  " << h.vi << endl;
-            NN[regNum].push_back(boost::math::cyl_bessel_j(radialOrder, radius) * cos(angularOrder * angle));
-            //cout << "In regionBessel hex after Bessel call  " << h.vi << endl;
-            numHexes++;
-        }
-        return numHexes;
     }
 
     void renewCentroids(int regNum) {
