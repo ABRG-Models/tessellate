@@ -1,0 +1,13 @@
+pair<float,float> v1 = make_pair (-0.750000, -0.750000);
+pair<float,float> v2 = make_pair (0.750000, -0.750000);
+pair<float,float> v3 = make_pair (0.750000, 0.750000);
+pair<float,float> v4 = make_pair (-0.750000, 0.750000);
+morph::BezCurve<float> c1(v1,v2);
+morph::BezCurve<float> c2(v2,v3);
+morph::BezCurve<float> c3(v3,v4);
+morph::BezCurve<float> c4(v4,v1);
+morph::BezCurvePath<float> bound;
+bound.addCurve(c1);
+bound.addCurve(c2);
+bound.addCurve(c3);
+bound.addCurve(c4);
