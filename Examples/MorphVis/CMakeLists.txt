@@ -83,8 +83,12 @@ set(MORPH_LIBS_CORE ${ARMADILLO_LIBRARY} ${ARMADILLO_LIBRARIES} ${HDF5_C_LIBRARI
 
 
 add_executable(pFieldVis pFieldVis.cpp)
-target_compile_definitions(pFieldVis PUBLIC FLT=float SINGLE)
+target_compile_definitions(pFieldVis PUBLIC FLT=float SINGLE COMPILE_PLOTTING)
 target_link_libraries(pFieldVis ${MORPH_LIBS_CORE} ${MORPH_LIBS_GL} )
+
+add_executable(pFieldRem pFieldRem.cpp)
+target_compile_definitions(pFieldRem PUBLIC FLT=float SINGLE COMPILE_PLOTTING)
+target_link_libraries(pFieldRem ${MORPH_LIBS_CORE} ${MORPH_LIBS_GL} )
 
 
 add_executable(pFieldSingle pFieldSingle.cpp)
@@ -94,7 +98,12 @@ target_link_libraries(pFieldSingle ${MORPH_LIBS_CORE} ${MORPH_LIBS_GL} )
 
 add_executable(setCentres setCentres.cpp)
 target_compile_definitions(setCentres PUBLIC FLT=double)
-target_link_libraries(setCentres ${MORPH_LDFLAGS} armadillo ${OPENGL_LIBRARIES})
+target_link_libraries(setCentres ${MORPH_LDFLAGS})
+
+add_executable(setRectangles setRectangles.cpp)
+target_compile_definitions(setRectangles PUBLIC FLT=float)
+target_link_libraries(setRectangles ${MORPH_LDFLAGS})
+
 
 
 

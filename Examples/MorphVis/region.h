@@ -34,6 +34,7 @@
 #define HEX_GEOM
 #include "hexGeometry.h"
 #endif
+#include <boost/math/special_functions/bessel.hpp>
 #define PI 3.1415926535897932
 
 using std::vector;
@@ -133,6 +134,7 @@ public:
     vector<FLT> nn, cc; //hold the field values for each hex in the whole hexGrid
     vector <pair <FLT, FLT>> centres; //seed points for regions
     vector<pair <FLT, FLT>> centroids; // centroids for regions
+    vector<pair <FLT, FLT>> rectCorners; // corners of a rectangular region
     vector<std::pair<FLT,FLT>> diff; //difference between seed point and CoG of region
     morph::HexGrid* Hgrid; //original hexGrid
     vector<morph::BezCurvePath<FLT>> curvedBoundary; //vector of boundaries for creating morphed regions
@@ -156,7 +158,7 @@ public:
         this->hexArea = 3.0*tan30*this->ds*this->ds;
         ofstream afile (this->logpath + "/debug.out" );
         ofstream jfile (this->logpath + "/correlateVector.out");
-        ifstream bfile(this->logpath + "/ratCentres.inp");
+        ifstream bfile(this->logpath + "/rectCentres.inp");
         afile << this->logpath << endl;
         cout << "before creating BezCurve" <<endl;
         srand(time(NULL)); //reseed random number generator
@@ -168,11 +170,16 @@ public:
         afile << " the maximum value of x is is " << maxX << endl;
         hGeo = new hexGeometry();
         // now read in the boundary either as a header or as a morph  d
-        //   #include "bez5side.h"
-        morph::ReadCurves r("./rat.svg");
-        Hgrid->setBoundary (r.getCorticalPath(),true);
+        #include "bezRect.h"
+        rectCorners.resize(4);
+        this->rectCorners[0] = v1;
+        this->rectCorners[1] = v2;
+        this->rectCorners[2] = v3;
+        this->rectCorners[3] = v4;
+        //morph::ReadCurves r("./rat.svg");
+        //Hgrid->setBoundary (r.getCorticalPath(),true);
         // this was the original call, I am trying out setBoundaryDregion for debugging
-        //    Hgrid->setBoundary(bound,false);
+        Hgrid->setBoundary(bound,true);
         //Hgrid->setEllipticalBoundary (1.0, 1.0);
         cout << "after setting boundary on  H " << Hgrid->num() << endl;
         n = Hgrid->num();
@@ -208,7 +215,8 @@ public:
         vCoords.resize(NUMPOINTS); //vertex coordinates of a region
         mCoords.resize(NUMPOINTS); //midpoint coordinates of a region
         innerRegion.resize(NUMPOINTS);
-      // check the order numbering in hexen
+
+      /* check the order numbering in hexen
         int hexCount = 0;
         for (auto h : Hgrid->hexen) {
             afile << "loop interation " << hexCount << " h.vi " << h.vi << endl;
@@ -218,7 +226,8 @@ public:
         for (unsigned int i=0; i<NUMPOINTS; i++) {
             innerRegion[i] = true;
         }
-
+*/
+        cout << "before neighbour array" << endl;
    // making a neighbour array for convenience
         for (int idx = 0; idx < n; idx++) {
             N[idx].resize(6);
@@ -347,7 +356,7 @@ public:
        for (unsigned int j=0;j<NUMPOINTS;j++){
            for (auto h : Hgrid->hexen) {
                if (region[h.vi][0] == (int) j) {
-                   //cout << "hex " << h.vi << " region " << region[h.vi][0] << " j " << j<< endl;
+                   afile << "hex " << h.vi << " region " << region[h.vi][0] << " j " << j<< endl;
                    this->regionHex[j].push_back(h);
                }
            }
@@ -441,6 +450,25 @@ public:
             }
         }
     }// end of method setInternalBoundary
+
+    /*!
+     * set corner points of a rectangular outer region as vertices
+     */
+    void cornerVertices() {
+        std::list<morph::Hex>::iterator h0;
+        h0 = this->Hgrid->findHexNearest(this->rectCorners[0]);
+        std::list<morph::Hex>::iterator h1;
+        h1 = this->Hgrid->findHexNearest(this->rectCorners[1]);
+        std::list<morph::Hex>::iterator h2;
+        h2 = this->Hgrid->findHexNearest(this->rectCorners[2]);
+        std::list<morph::Hex>::iterator h3;
+        h3 = this->Hgrid->findHexNearest(this->rectCorners[3]);
+        this->Creg[(*h0).vi] = 7;
+        this->Creg[(*h1).vi] = 7;
+        this->Creg[(*h2).vi] = 7;
+        this->Creg[(*h3).vi] = 7;
+    }
+
     /*!
      * Euclidean distance between two points
      */
@@ -2891,6 +2919,24 @@ FLT regnnfrac (int regNum) {
         }
         cout << " region " << regNum << " bound size " <<regionBound[regNum].size() << endl;
         return;
+    }
+
+    int regionBessel(int regNum, int radialOrder, int angularOrder, FLT phase, FLT Dn=1.0) {
+        int numHexes = 0;
+        for (auto h : this->regionHex[regNum]) {
+            FLT radius = h.r * (1.0 * Dn + 1.0);
+            FLT angle = 0;
+            //cout << "In regionBessel after r and before phi " << h.vi << endl;
+            if (h.phi >= phase)
+                angle = h.phi - phase;
+            else
+                angle = h.phi + 2.0 * PI - phase;
+            //cout << "In regionBessel hex before Bessel call  " << h.vi << endl;
+            NN[regNum].push_back(boost::math::cyl_bessel_j(radialOrder, radius) * cos(angularOrder * angle));
+            //cout << "In regionBessel hex after Bessel call  " << h.vi << endl;
+            numHexes++;
+        }
+        return numHexes;
     }
 
     void renewCentroids(int regNum) {
