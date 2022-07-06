@@ -136,19 +136,33 @@ public:
 	  }
 	  return result;
     }
-
+/*!
+ * for mixing bits of three arguments used to generate a good random
+ * seed using time(), getpid() and clock()
+ */
+unsigned int
+mix (unsigned int a, unsigned int b, unsigned int c)
+{
+    a=a-b;  a=a-c;  a=a^(c >> 13);
+    b=b-c;  b=b-a;  b=b^(a << 8);
+    c=c-a;  c=c-b;  c=c^(b >> 13);
+    a=a-b;  a=a-c;  a=a^(c >> 12);
+    b=b-c;  b=b-a;  b=b^(a << 16);
+    c=c-a;  c=c-b;  c=c^(b >> 5);
+    a=a-b;  a=a-c;  a=a^(c >> 3);
+    b=b-c;  b=b-a;  b=b^(a << 10);
+    c=c-a;  c=c-b;  c=c^(b >> 15);
+    return c;
+}
 
 
 
   //function find_max to find turning points both values and indices.
-    int find_max(vector<FLT> ray, int window) {
+    int find_extrema(vector<FLT> ray, int window) {
     int size = ray.size();
-    // ofstream dfile ("turn.txt",ios::app);
-    //dfile <<"size = " << size <<endl;
     vector<FLT> smoothRay;
     smoothRay = this->smooth_vector(ray, window);
     turnVal.resize(1000);
-    //cout <<" "<<iend<<iend<<flush;
     FLT old_slope = 0;
     FLT new_slope = 0;
     int count = 0;
@@ -156,11 +170,10 @@ public:
     for (int i =2; i<=size+1;i++){
 
       new_slope = smoothRay[i%size]-smoothRay[(i-1)%size];
-      //dfile << " " << i%size << " " << old_slope << " "<<new_slope <<endl;
       if (new_slope*old_slope < 0.) {
 	turnVal[count].radialIndex = i;
 	turnVal[count].radialValue = smoothRay[i]; //should really interpolate
-      //  dfile << "turn index " << turnVal[count].radialIndex << " turn value " << turnVal[count].radialValue << endl;
+        std::cout << "turn index " << turnVal[count].radialIndex << " turn value " << turnVal[count].radialValue << endl;
         count++;
       }
       old_slope = new_slope;

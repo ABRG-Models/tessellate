@@ -110,6 +110,7 @@ int main (int argc, char **argv)
       return -1;
     }
     string jsonfile = argv[1];
+    string logpath = argv[2];
     //  open the confgig file and read in the parameters
     morph::Config conf(jsonfile);
     if (!conf.ready) {
@@ -146,7 +147,7 @@ int main (int argc, char **argv)
     int plotEvery = conf.getInt("plotEvery",1000);
     int checkEvery = conf.getInt("checkEvery",1000);
     int fov = conf.getInt("fov",50);
-    string logpath = conf.getString("logpath", "./logsMorph") ;
+    //string logpath = conf.getString("logpath", "./logsMorph") ;
     string iter = conf.getString("iter","0");
     bool LfixedSeed = conf.getBool("LfixedSeed",0);
     bool LDn = conf.getBool("LDn",false);
@@ -154,7 +155,6 @@ int main (int argc, char **argv)
     bool skipMorph  = conf.getBool("skipMorph",false);
     bool Lcontinue = conf.getBool("Lcontinue",false);
     unsigned int numpoints = conf.getInt("numpoints",41);
-    unsigned int framecount = 0;
     cout << " Lcontinue " << Lcontinue << " skipMorph " << skipMorph << endl;
     ofstream afile (logpath + "/centroids.out",ios::app);
 #ifdef COMPILE_PLOTTING
@@ -164,10 +164,10 @@ int main (int argc, char **argv)
 
     // A ra2yyndo2yym uniform generator returning real/FLTing point types
     ofstream gfile ( logpath + "/edges.out");
-    ofstream jfile ( logpath + "/results.txt");
-    ofstream degfile1 (logpath + "/degree1.data");
-    ofstream degfile2 (logpath + "/degree2.data");
-    ofstream degfile3 (logpath + "/degree3.data");
+    ofstream jfile ( logpath + "/results.txt",ios::app);
+    ofstream degfile1 (logpath + "/degree1.data", ios::app);
+    ofstream degfile2 (logpath + "/degree2.data", ios::app);
+    ofstream degfile3 (logpath + "/degree3.data", ios::app);
 
     //set seed
     unsigned int seed;
@@ -182,6 +182,7 @@ int main (int argc, char **argv)
     DRegion M(scale,xspan,logpath,numpoints); //create tessellation
     M.setCreg(); //set counts to identify inner boundaries
     M.setInternalBoundary(); //set internal boundaries
+    M.cornerVertices(); //sets the rectangle corner hexes as vertices
     cout << "before dissect_boundary " << endl;
     vector<std::pair<FLT,FLT>> cGravity;
     cGravity = M.dissectBoundary(); //dissect region boundary
@@ -196,7 +197,7 @@ int main (int argc, char **argv)
     }
     if (inReg != rC) {
         cout << "Error: setInnerRegion returns " << inReg << " but outerRegions " << rC << endl;
-        return -1;
+        //return -1;
     }
     else {
         cout << "Success: setInnerRegion no of outer regions " << inReg << endl;
@@ -221,6 +222,8 @@ int main (int argc, char **argv)
     DcVal.resize(numpoints,0.0);
     vector<FLT> morph0Area;
     morph0Area.resize(numpoints,0.0);
+    //only need this for when we investigate random jitter in parameters
+    /*
     for (unsigned int j = 0; j<numpoints; j++) {
         if (LDn) {
             DchiVal[j] = Dchi * (1.0 + ruf.get()*0.5) ;
@@ -234,6 +237,7 @@ int main (int argc, char **argv)
             DcVal[j] = Dc;
         }
     }
+    */
     /*
      * Set boundaries based on polygons derived from the Dregion tesselation.
      * stored in curvedBoundary
@@ -282,6 +286,7 @@ int main (int argc, char **argv)
     // If true, then write out the logs in consecutive order numbers,
     // rather than numbers that relate to the simulation timestep.
     const bool vidframes = conf.getBool ("vidframes", true);
+    unsigned int framecount = 0;
 
     // Window width and height
     const unsigned int win_width = conf.getUInt ("win_width", 2050UL);
@@ -476,15 +481,8 @@ int main (int argc, char **argv)
     NNcurr.resize(numpoints);
     FLT NNdiffSum = 0.0f;
   //initilise all Apre vectors to above possible field
-    if (!Lcontinue){
-        for (unsigned int j=0; j<numpoints;j++) {
-            NNpre[j].resize(S[j].NN.size(),10000.0);
-        }
-    }
-    else {
-        for (unsigned int j=0; j<numpoints; j++) {
-            NNpre[j] = S[j].NN;
-        }
+    for (unsigned int j=0; j<numpoints;j++) {
+        NNpre[j].resize(S[j].NN.size(),10000.0);
     }
     // begin morph0 time stepping loop
     for (unsigned int i=0;i<numsteps;i++) {
@@ -579,13 +577,13 @@ int main (int argc, char **argv)
     vector <FLT> radiusVector;
     int degreeRadius;
     int degreeAngle;
-	FLT tempArea = 0.0;
-	FLT tempPerimeter = 0.0;
+    FLT tempArea = 0.0;
+    FLT tempPerimeter = 0.0;
     int angleOffset = 0;
-    int radiusOffset = 0;
-	FLT avDegreeRadius = 0.0;
-	FLT avDegreeAngle = 0;
-	FLT occupancy = 0.0;
+    int radiusOffset = numSectors/2;
+    FLT avDegreeRadius = 0.0;
+    FLT avDegreeAngle = 0;
+    FLT occupancy = 0.0;
     int countRegions = 0;
     FLT avAbsCorrelation = 0.0;
     const int max_comp = numpoints*3;
@@ -607,14 +605,14 @@ int main (int argc, char **argv)
 
             // analogue version
             angleVector = M.sectorize_reg_angle(j,numSectors,radiusOffset, numSectors, S[j].NN);
-            angleVector = L.meanzero_vector(angleVector);
+            //angleVector = L.meanzero_vector(angleVector);
             //degreeAngle = M.find_max(angleVector,3);
-            degreeAngle = L.find_zeroAngle(angleVector,3);
+            degreeAngle = L.find_extrema(angleVector,3);
             gfile << "region "<< j << " degreeAngle "<< degreeAngle << "  " << tempArea<< "  "<< tempPerimeter<<endl<<flush;
 
             //radial degree
             degreeRadius = -100;
-            radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors/2, S[j].NN);
+            radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors, S[j].NN);
             //gfile <<"after sectorize_reg_radius"<<endl;
             // radiusVector = M.meanzero_vector(radiusVector);
             degreeRadius = L.find_zeroDRadius(radiusDVector);
@@ -622,7 +620,8 @@ int main (int argc, char **argv)
 
             //radial degree
             degreeRadius = -100;
-            int newdegreeRadius = 0;
+            //int newdegreeRadius = 0;
+            /*
             for (int angleOffset=0; angleOffset<numSectors -1; angleOffset += 3) {
 			    radiusVector = M.sectorize_reg_radius(j,numSectors, angleOffset, angleOffset + numSectors/2, S[j].NN);
 			    newdegreeRadius = L.find_zeroRadius(radiusVector,3);
@@ -630,6 +629,9 @@ int main (int argc, char **argv)
                     degreeRadius = newdegreeRadius;
                 }
 		    }
+            */
+	    radiusVector = M.sectorize_reg_radius(j,numSectors, angleOffset, numSectors, S[j].NN);
+	    degreeRadius = L.find_extrema(radiusVector,3);
             gfile <<  " region "<< j << " degreeRadius  "<< degreeRadius << "  " <<endl << endl;
             regionCount++;
 #ifdef RANDOM
@@ -664,7 +666,7 @@ int main (int argc, char **argv)
 		      avDegreeAngle += degreeAngle;
               //radial degree
 		      degreeRadius = 0;
-              radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors/2, S[j].NN);
+              radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors, S[j].NN);
               degreeRadius = L.find_zeroDRadius(radiusDVector);
               avDegreeRadius += degreeRadius;
               degfile1 << degreeAngle/2 << " " << degreeRadius << " " << M.regNNfrac(j) << " " << tempArea << " "<< tempPerimeter<<endl<<flush;
@@ -743,9 +745,9 @@ int main (int argc, char **argv)
     for (unsigned int j = 0;j<numpoints;j++) {
         FLT area = M.hexArea*M.regArea(j);
         if (LDn) {
-            DchiVal[j] = Dchi * sqrt(morph0Area[j] / area);
-            DnVal[j] = Dn *  sqrt(morph0Area[j] / area);
-            DcVal[j] = Dc * sqrt(morph0Area[j] / area);
+            DchiVal[j] = Dchi * sqrt (area / morph0Area[j]);
+            DnVal[j] = Dn *  sqrt(area / morph0Area[j]);
+            DcVal[j] = Dc * sqrt(area / morph0Area[j]);
         }
         else {
             DchiVal[j] = Dchi;
@@ -914,8 +916,10 @@ int main (int argc, char **argv)
     for (unsigned int j=0; j<numpoints;j++) {
         NNpre[j].resize(S[j].NN.size(),1000.0);
     }
+#ifdef COMPILE_PLOTTING
     //reset framecount
     framecount = 0;
+#endif
     //start of time-stepping loo
     for (unsigned int i=0;i<numsteps;i++) {
         for (unsigned int j = 0;j<numpoints;j++) { //loop over regions
@@ -1023,13 +1027,13 @@ int main (int argc, char **argv)
 
                   // analogue version
                   angleVector = M.sectorize_reg_angle(j,numSectors,radiusOffset, numSectors, S[j].NN);
-                  angleVector = L.meanzero_vector(angleVector);
+                  //angleVector = L.meanzero_vector(angleVector);
                   //degreeAngle = M.find_max(angleVector,3);
-                  degreeAngle = L.find_zeroAngle(angleVector,3);
+                  degreeAngle = L.find_extrema(angleVector,3);
                   gfile << "region "<< j << " degreeAngle "<< degreeAngle << "  " << tempArea<< "  "<< tempPerimeter<<endl<<flush;
                   //radial degree
                   degreeRadius = -100;
-                  radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors/2, S[j].NN);
+                  radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors, S[j].NN);
                   //gfile <<"after sectorize_reg_radius"<<endl;
                   // radiusVector = M.meanzero_vector(radiusVector);
 
@@ -1038,16 +1042,9 @@ int main (int argc, char **argv)
 
                   ///radial degree
                   degreeRadius = -100;
-                  int newdegreeRadius = 0;
-                  for (int angleOffset=0; angleOffset<numSectors -1; angleOffset += 3)
-				  {
-			          radiusVector = M.sectorize_reg_radius(j,numSectors, angleOffset, angleOffset + numSectors/2, S[j].NN);
-			          newdegreeRadius = L.find_zeroRadius(radiusVector,3);
-			          if (newdegreeRadius > degreeRadius)
-				      degreeRadius = newdegreeRadius;
-		          }
 
-
+                  radiusVector = M.sectorize_reg_radius(j,numSectors, angleOffset, numSectors, S[j].NN);
+	          degreeRadius = L.find_extrema(radiusVector,3);
                   gfile <<  " region "<< j << " degreeRadius  "<< degreeRadius << "  " <<endl << endl;
 
 
@@ -1095,7 +1092,7 @@ int main (int argc, char **argv)
 		      avDegreeAngle += degreeAngle;
               //radial degree
 		      degreeRadius = 0;
-              radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors/2, S[j].NN);
+              radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors, S[j].NN);
               degreeRadius = L.find_zeroDRadius(radiusDVector);
               avDegreeRadius += degreeRadius;
 
@@ -1151,9 +1148,9 @@ int main (int argc, char **argv)
     for (unsigned int j = 0;j<numpoints;j++) {
         FLT area = M.hexArea*M.regArea(j);
         if (LDn) {
-            DchiVal[j] =  Dchi * sqrt(morph0Area[j] /  area);
-            DnVal[j] = Dn * sqrt(morph0Area[j] / area);
-            DcVal[j] = Dc * sqrt(morph0Area[j] / area);
+            DchiVal[j] =  Dchi * sqrt(area / morph0Area[j]);
+            DnVal[j] = Dn * sqrt(area / morph0Area[j]);
+            DcVal[j] = Dc * sqrt(area / morph0Area[j]);
         }
         else {
             DchiVal[j] =  Dchi;
@@ -1318,9 +1315,10 @@ int main (int argc, char **argv)
     for (unsigned int j=0; j<numpoints;j++) {
         NNpre[j].resize(S[j].NN.size(),1000.0);
     }
-
+#ifdef COMPILE_PLOTTING
     //reset framecount
     framecount = 0;
+#endif
 
     for (unsigned int i=0;i<numsteps;i++) {
         for (unsigned int j = 0;j<numpoints;j++) {
@@ -1432,26 +1430,20 @@ int main (int argc, char **argv)
 
            // analogue version
             angleVector = M.sectorize_reg_angle(j,numSectors,radiusOffset, numSectors, S[j].NN);
-            angleVector = L.meanzero_vector(angleVector);
+            //angleVector = L.meanzero_vector(angleVector);
             //degreeAngle = M.find_max(angleVector,3);
-            degreeAngle = L.find_zeroAngle(angleVector,3);
+            degreeAngle = L.find_extrema(angleVector,3);
             gfile << "region "<< j << " degreeAngle "<< degreeAngle << "  " << tempArea<< "  "<< tempPerimeter<<endl<<flush;
             //radial degree
             degreeRadius = -100;
-            radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors/2, S[j].NN);
+            radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors, S[j].NN);
             //gfile <<"after sectorize_reg_radius"<<endl;
             degreeRadius = L.find_zeroDRadius(radiusDVector);
             gfile  << "region "<< j << " degreeDRadius "<< degreeRadius << "  " <<endl;
             //radial degree
             degreeRadius = -100;
-            int newdegreeRadius = 0;
-			for (int angleOffset=0; angleOffset<numSectors -1; angleOffset += 3) {
-                radiusVector = M.sectorize_reg_radius(j,numSectors, angleOffset, angleOffset + numSectors/2, S[j].NN);
-                newdegreeRadius = L.find_zeroRadius(radiusVector,3);
-                if (newdegreeRadius > degreeRadius) {
-				    degreeRadius = newdegreeRadius;
-                }
-		    }
+	    radiusVector = M.sectorize_reg_radius(j,numSectors, angleOffset, numSectors, S[j].NN);
+	    degreeRadius = L.find_extrema(radiusVector,3);
             gfile <<  " region "<< j << " degreeRadius  "<< degreeRadius << "  " <<endl << endl;
             regionCount++;
 #ifdef RANDOM
@@ -1493,10 +1485,10 @@ int main (int argc, char **argv)
             cout << "after sectorixe Dangle morph2 " << endl;
             //radial degree
             degreeRadius = 0;
-            radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors/2, S[j].NN);
+            radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors, S[j].NN);
             degreeRadius = L.find_zeroDRadius(radiusDVector);
             avDegreeRadius += degreeRadius;
-            degfile3 << degreeAngle << " " << degreeRadius << " " << M.regNNfrac(j) << " " << tempArea << " " << tempPerimeter<<endl<<flush;
+            degfile3 << degreeAngle/2 << " " << degreeRadius << " " << M.regNNfrac(j) << " " << tempArea << " " << tempPerimeter<<endl<<flush;
 #ifdef RANDOM
          } //end of if on non-zero regions
 #endif
