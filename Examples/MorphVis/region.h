@@ -141,7 +141,6 @@ public:
     hexGeometry* hGeo; //supporting class for geometric analysis
     vector<vector<hexGeometry::lineSegment>> radialSegments; //radial segements from original vertices
     vector<vector<FLT>> radialAngles; //angles of the vertices from the centroid.
-
  /*! class constructor
   * scale controls the resolution of the hexagonal grid
   * xspan controls the width of the hexagonal grid
@@ -176,8 +175,10 @@ public:
         this->rectCorners[1] = v2;
         this->rectCorners[2] = v3;
         this->rectCorners[3] = v4;
-        //morph::ReadCurves r("./rat.svg");
-        //Hgrid->setBoundary (r.getCorticalPath(),true);
+        /*
+        morph::ReadCurves r("./rat.svg");
+        Hgrid->setBoundary (r.getCorticalPath(),true);
+        */
         // this was the original call, I am trying out setBoundaryDregion for debugging
         Hgrid->setBoundary(bound,true);
         //Hgrid->setEllipticalBoundary (1.0, 1.0);
@@ -1160,10 +1161,10 @@ FLT renewRegPerimeter (int regNum) {
 
     // transform vector so its mean is zero
     vector<FLT> meanzero_vector(vector<FLT> invector) {
-        //ofstream meanzero ("meanzero.txt",ios::app);
+        ofstream meanzero ("meanzero.txt",ios::app);
         vector <FLT> result;
         unsigned int size = invector.size();
-        //meanzero << "size " << size << endl;
+        meanzero << "size " << size << endl;
         FLT sum = 0;
         FLT absSum = 0;
         for (unsigned int i=0; i <size; i++) {
@@ -1172,11 +1173,11 @@ FLT renewRegPerimeter (int regNum) {
         }
         sum = sum/(1.0*size);
         absSum = absSum / (1.0 * size);
-        //meanzero << " mean  " << sum << endl;
-        //meanzero << " absolute mean  " << absSum << endl;
+        meanzero << " mean  " << sum << endl;
+        meanzero << " absolute mean  " << absSum << endl;
         for (unsigned int i=0; i < size; i++) {
             result.push_back(invector[i] - sum);
-            //meanzero << " i " << result[i] << endl;
+            meanzero << " i " << result[i] << endl;
         }
         return result;
     }
@@ -2582,7 +2583,9 @@ FLT regnnfrac (int regNum) {
         rB.resize(0);
         irB.resize(0);
         int bsize = regionBound[regNum].size();
-        this->sortedBoundary[regNum].clear();
+        this->sortedBoundary[regNum].resize(0);
+        this->sortedBoundaryPhi[regNum].resize(0);
+        this->sortedBoundaryNN[regNum].resize(0);
         for (auto& h : this->regionBound[regNum]) {
             FLT angle = h.phi;
             rB.push_back(angle);
@@ -3079,7 +3082,7 @@ FLT regnnfrac (int regNum) {
         string str = to_string(morphNum);
         ofstream corrfile(this->logpath + "/correlate" + str + ".data",ios::app);
         ofstream edgefile(this->logpath + "/edgeCorrelations" + str + ".txt",ios::app);
-        edgefile << " in morphed edge correlation routine "<<endl;
+        edgefile << " in morphed edge correlation routine size of regionList is "<< this->regionList.size() << std::endl;
         vector<FLT> first;
         vector<FLT> second;
         vector<FLT> dinterp;
@@ -3092,10 +3095,12 @@ FLT regnnfrac (int regNum) {
         int countResult = 0;
         FLT NNmean1, NNmean2;
         NNmean1 = this->meanNN(regNum);
-        edgefile << " mean of NN in region " << regNum << "is " << NNmean1 << endl;
-        for (auto j = this->regionList[regNum].begin(); j < this->regionList[regNum].end(); j++)  {
+        edgefile << " mean of NN in region " << regNum << "is " << NNmean1 << " regionList " << 1 << " is " << regionList[1].size() << endl;
+        for (auto j = this->regionList[regNum].begin(); j != this->regionList[regNum].end(); j++)  {
             if (*j == -1) continue;
+            edgefile << "just before NNMean2  " << *j << std::endl;
             NNmean2 = this->meanNN(*j); //find the mean of NN in the region
+            //NNmean2 = 0;
             edgefile << " j iteration " << *j << " region " << regNum <<" NNmean2 " << NNmean2 << endl;
             first.resize(0);
             second.resize(0);

@@ -158,28 +158,49 @@ mix (unsigned int a, unsigned int b, unsigned int c)
 
 
   //function find_max to find turning points both values and indices.
-    int find_extrema(vector<FLT> ray, int window) {
+    int find_extrema(vector<FLT> ray, int window=0) {
+        int size = ray.size();
+        vector<FLT> smoothRay;
+        smoothRay = this->smooth_vector(ray, window);
+        turnVal.resize(1000);
+        FLT old_slope = 0;
+        FLT new_slope = 0;
+        int count = 0;
+        old_slope = smoothRay[1] - smoothRay[0];
+        for (int i =2; i<=size+1;i++){
+            new_slope = smoothRay[i%size]-smoothRay[(i-1)%size];
+            if (new_slope*old_slope < 0.) {
+                turnVal[count].radialIndex = i;
+                turnVal[count].radialValue = smoothRay[i]; //should really interpolate
+                std::cout << "turn index " << turnVal[count].radialIndex << " turn value " << turnVal[count].radialValue << endl;
+                count++;
+            }
+            old_slope = new_slope;
+        }
+        return count;
+    }
+
+  //function return indices of maxima in an array.
+    vector<int> find_maxIndices(vector<FLT> ray, int window=0) {
+    vector<int> result;
+    result.resize(0);
     int size = ray.size();
     vector<FLT> smoothRay;
     smoothRay = this->smooth_vector(ray, window);
-    turnVal.resize(1000);
-    FLT old_slope = 0;
-    FLT new_slope = 0;
-    int count = 0;
+    FLT old_slope = 0.0;
+    FLT new_slope = 0.0;
     old_slope = smoothRay[1] - smoothRay[0];
-    for (int i =2; i<=size+1;i++){
-
-      new_slope = smoothRay[i%size]-smoothRay[(i-1)%size];
-      if (new_slope*old_slope < 0.) {
-	turnVal[count].radialIndex = i;
-	turnVal[count].radialValue = smoothRay[i]; //should really interpolate
-        std::cout << "turn index " << turnVal[count].radialIndex << " turn value " << turnVal[count].radialValue << endl;
-        count++;
-      }
+    for (int i=2; i<=size+2; i++){
+        new_slope = smoothRay[i%size]-smoothRay[(i-1)%size];
+        if (old_slope < 0.0 && new_slope > 0.0) {
+            result.push_back(i);
+            std::cout << "turn index " << i << " turn value " << (smoothRay[i%size] + smoothRay[(i+1)%size])/2.0 << " old slope " << old_slope << " new slope " << new_slope  << endl;
+        }
       old_slope = new_slope;
     }
-    return count;
+    return result;;
   }
+
 // find the zeros in a ray angular
     int find_zeroDAngle(vector<int> ray) {
     int size = ray.size();
@@ -200,13 +221,13 @@ mix (unsigned int a, unsigned int b, unsigned int c)
     return count;
   }
 
-// find the zeros in a ray angular
+// find the indices of zeros in a ray angular
     vector<int> find_zeroIndices(vector<FLT> ray) {
     vector<int> result;
     result.resize(0);
     result.resize(0);
     int size = ray.size();
-    ofstream zerofile ("zero.txt",ios::app);
+    ofstream zerofile ("./zero.txt",ios::app);
     zerofile << "size = " << size << endl;
     FLT oldVal = ray[0];
     zerofile << " first oldVal = " << oldVal << " ray[0] " << ray[0] << endl;
@@ -214,9 +235,9 @@ mix (unsigned int a, unsigned int b, unsigned int c)
     for (int i = 1 ; i<size+1; i++){
       //  if (ray[i%size] != 0.0) {
            FLT newVal = ray[i%size];
-           zerofile << " radius " << i%size << " " << oldVal << " "<< newVal << " ray[i] " << ray[i%size] << endl;
            FLT norm = fabs(oldVal*newVal);
-           if (oldVal*newVal/norm < 0.0) {
+           if (oldVal*newVal/norm < 0.0 && oldVal <0.0) {
+                zerofile << " radius " << i%size << " " << oldVal << " "<< newVal << " ray[i] " << ray[i%size] << endl;
                  result.push_back(i);
                  count++;
            }
@@ -287,7 +308,7 @@ mix (unsigned int a, unsigned int b, unsigned int c)
     for (int i =1; i<size+1;i++){
       new_val = smoothRay[i%size];
       //zerofile << " " << i%size << " " << old_val << " "<<new_val <<endl;
-      if (new_val*old_val < 0.) {
+      if (new_val*old_val < 0.0) {
 	turnVal[count].radialIndex = i;
 	turnVal[count].radialValue =smoothRay[i]; //should really interpolate
         //zerofile << "turn index " << turnVal[count].radialIndex << " turn value " << turnVal[count].radialValue << endl;

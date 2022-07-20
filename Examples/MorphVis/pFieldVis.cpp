@@ -110,7 +110,7 @@ int main (int argc, char **argv)
       return -1;
     }
     string jsonfile = argv[1];
-    string logpath = argv[2];
+//    string logpath = argv[2];
     //  open the confgig file and read in the parameters
     morph::Config conf(jsonfile);
     if (!conf.ready) {
@@ -147,7 +147,7 @@ int main (int argc, char **argv)
     int plotEvery = conf.getInt("plotEvery",1000);
     int checkEvery = conf.getInt("checkEvery",1000);
     int fov = conf.getInt("fov",50);
-    //string logpath = conf.getString("logpath", "./logsMorph") ;
+    string logpath = conf.getString("logpath", "./logsMorph") ;
     string iter = conf.getString("iter","0");
     bool LfixedSeed = conf.getBool("LfixedSeed",0);
     bool LDn = conf.getBool("LDn",false);
@@ -170,10 +170,11 @@ int main (int argc, char **argv)
     ofstream degfile3 (logpath + "/degree3.data", ios::app);
 
     //set seed
+    std::cout << "LfixedSeed = " << LfixedSeed << std::endl;
     unsigned int seed;
     chrono::milliseconds ms1 = duration_cast<milliseconds>(system_clock::now().time_since_epoch());
     if (LfixedSeed)
-        seed = 1;
+        seed = 596927;
     else
         seed = static_cast<unsigned int> (ms1.count());
 
@@ -181,7 +182,10 @@ int main (int argc, char **argv)
 // initialise DRegion class setting scale
     DRegion M(scale,xspan,logpath,numpoints); //create tessellation
     M.setCreg(); //set counts to identify inner boundaries
+    cout << "after setCreg" << std::endl;
     M.setInternalBoundary(); //set internal boundaries
+    cout << "after setInternalBoundary" << std::endl;
+    //next line only needed for rectangular type domains
     M.cornerVertices(); //sets the rectangle corner hexes as vertices
     cout << "before dissect_boundary " << endl;
     vector<std::pair<FLT,FLT>> cGravity;
@@ -380,32 +384,37 @@ int main (int argc, char **argv)
 	        ginput.read_contained_vals(nst,S[j].NN);
 		}
 	  }
-      else
-	  {
-        for (unsigned int j=0;j<numpoints;j++)
-		{
-	        for (auto h : S[j].Hgrid->hexen) {
-            // boundarySigmoid. Jumps sharply (100, larger is sharper) over length
-            // scale 0.05 to 1. So if distance from boundary > 0.05, noise has
-            // normal value. Close to boundary, noise is less.
-		        FLT choice = ruf.get();
-		        if (choice > 0.5)
-				{
-                    S[j].NN[h.vi] = - ruf.get() * aNoiseGain +nnInitialOffset;
-                    S[j].CC[h.vi] = - ruf.get() * aNoiseGain + ccInitialOffset;
-				}
-		        else
-				{
-                    S[j].NN[h.vi] = ruf.get() * aNoiseGain +nnInitialOffset;
-                    S[j].CC[h.vi] = ruf.get() * aNoiseGain + ccInitialOffset;
-				}
-            if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
-                FLT bSig = 1.0 / ( 1.0 + exp (-100.0*(h.distToBoundary- boundaryFalloffDist)) );
-                S[j].NN[h.vi] = (S[j].NN[h.vi] - nnInitialOffset) * bSig + nnInitialOffset;
-                S[j].CC[h.vi] = (S[j].CC[h.vi] - ccInitialOffset) * bSig + ccInitialOffset;
-		 } //end of if on boundary distance
+        else {
+	    for (auto h : S[23].Hgrid->hexen) {
+		FLT choice = ruf.get();
+		if (choice > 0.5) {
+                    S[23].NN[h.vi] = - ruf.get() * aNoiseGain +nnInitialOffset;
+                    S[23].CC[h.vi] = - ruf.get() * aNoiseGain + ccInitialOffset;
+                    //S[9].NN[h.vi] = 0;
+                    //S[9].CC[h.vi] = 0;
+                }
+                else {
+                    S[23].NN[h.vi] = ruf.get() * aNoiseGain +nnInitialOffset;
+                    S[23].CC[h.vi] = ruf.get() * aNoiseGain + ccInitialOffset;
+                    //S[9].NN[h.vi] = 0;
+                    //S[9].CC[h.vi] = 0;
+		}
+                //if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
+                // boundarySigmoid. Jumps sharply (100, larger is sharper) over length
+                // scale 0.05 to 1. So if distance from boundary > 0.05, noise has
+                // normal value. Close to boundary, noise is less.
+                    //FLT bSig = 1.0 / ( 1.0 + exp (-100.0*(h.distToBoundary- boundaryFalloffDist)) );
+                    //S[9].NN[h.vi] = (S[9].NN[h.vi] - nnInitialOffset) * bSig + nnInitialOffset;
+                    //S[9].CC[h.vi] = (S[9].CC[h.vi] - ccInitialOffset) * bSig + ccInitialOffset;
+                //} //end of if on boundary distance
 	    }//end of loop over region
-	   }//end of loop over all regions
+            for (unsigned int j=0; j < numpoints; j++) {
+                    for (auto h : S[j].Hgrid->hexen) {
+                        int index = h.vi;
+                        S[j].NN[index] = S[23].NN[index];
+                        S[j].CC[index] = S[23].CC[index];
+                    }//end of loop over region
+            }//end of loop over all regions
       } //end of else on Lcontinue
      cout <<  "just after field creation first morph" << endl;
 
@@ -519,6 +528,7 @@ int main (int argc, char **argv)
                     VisualDataModel<FLT>* avm1 = (VisualDataModel<FLT>*)v1->getVisualModel (Bgrid[j]);
                     avm1->updateData (&regionNN);
                     avm1->clearAutoscaleColour();
+                    v1->render();
                     if (i%plotEvery == 0) {
                         std::cerr << std::setprecision(16) << " NN " << S[j].sum_NN << " lapNN " << S[j].sum_lapNN << " step " << i << " plotEvery " << plotEvery << std::endl;
                     }
@@ -534,16 +544,6 @@ int main (int argc, char **argv)
                 savePngs (logpath, "nn0", i , *v1);
             }
         }
-        // rendering the graphics. After each simulation step, check if enough time
-        // has elapsed for it to be necessary to call v1.render().
-        steady_clock::duration sincerender = steady_clock::now() - lastrender;
-        if (duration_cast<milliseconds>(sincerender).count() > 17000) { // 17 is about 60 Hz
-            glfwPollEvents();
-            v1->render();
-            lastrender = steady_clock::now();
-        }
-        //cerr << "Ctrl-c or press x in graphics window to exit.\n";
-        //v1->keepOpen();
 #endif
     }//end of time stepping
     //code run at end of timestepping
@@ -573,7 +573,7 @@ int main (int argc, char **argv)
     //declaration of variables needed for analysis
     vector <int> radiusDVector;
     vector <int> angleDVector;
-	vector <FLT> angleVector;
+    vector <FLT> angleVector;
     vector <FLT> radiusVector;
     int degreeRadius;
     int degreeAngle;
@@ -589,114 +589,69 @@ int main (int argc, char **argv)
     const int max_comp = numpoints*3;
     for (unsigned int j=0;j<numpoints;j++) {
         M.NN[j] = S[j].NN; //write the NN fields to the DRegion array
+    }
+    for (unsigned int j=0;j<numpoints;j++) {
 #ifdef RANDOM
-        if (M.innerRegion[j]){
+        if (M.innerRegion[j]) {
 #endif
-			int regionCount = 0;
-            gfile<<"in the degree loop" << endl;
-            //angle degree
+            countRegions++;
+            occupancy += M.regNNfrac(j);
             tempArea = M.regArea(j);
-            tempPerimeter = M.renewRegPerimeter(j);
-
-            // digital version
+            tempPerimeter = M.regPerimeter(j);
+            std::cout << "just before renewcorrelate edges morph0" << std::endl;
+            avAbsCorrelation += M.renewcorrelate_edges(j,1);
+            std::cout << "just after renewcorrelate edges morph0" << std::endl;
+            avAbsCorrelation += M.renewcorrelate_edges(j,1);
+            M.sortRegionBoundary(j);
+            vector<FLT> bdryNN = L.meanzero_vector(M.sortedBoundaryNN[j]);
+            gfile << " zeros round boundary region " << j << " is " << L.find_zeroAngle(bdryNN, 0) << std::endl;
+            std::vector<int> zeroIndices = L.find_zeroIndices(bdryNN);
+            std::vector<FLT> zeroAng;
+            zeroAng.resize(zeroIndices.size());
+            gfile << " size of zeroIndices " << zeroIndices.size() << " sortedBoundaryNN size " << M.sortedBoundaryNN[j].size() << std::endl;
+            for (unsigned int i=0; i<zeroAng.size(); i++) {
+                zeroAng[i] = M.sortedBoundaryPhi[j][zeroIndices[i]];
+                gfile << "region " << j << " zeroAng " << zeroAng[i] << std::endl;
+            }
             angleDVector = M.sectorize_reg_Dangle(j,numSectors,radiusOffset, numSectors, S[j].NN);
             degreeAngle = L.find_zeroDAngle(angleDVector);
-            gfile << "region "<< j << " degreeDAngle "<< degreeAngle << "  " << tempArea<< "  "<< tempPerimeter<<endl<<flush;
-
-            // analogue version
-            angleVector = M.sectorize_reg_angle(j,numSectors,radiusOffset, numSectors, S[j].NN);
-            //angleVector = L.meanzero_vector(angleVector);
-            //degreeAngle = M.find_max(angleVector,3);
-            degreeAngle = L.find_extrema(angleVector,3);
-            gfile << "region "<< j << " degreeAngle "<< degreeAngle << "  " << tempArea<< "  "<< tempPerimeter<<endl<<flush;
-
+            avDegreeAngle += degreeAngle;
             //radial degree
-            degreeRadius = -100;
+            degreeRadius = 0;
             radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors, S[j].NN);
-            //gfile <<"after sectorize_reg_radius"<<endl;
-            // radiusVector = M.meanzero_vector(radiusVector);
             degreeRadius = L.find_zeroDRadius(radiusDVector);
-            gfile  << "region "<< j << " degreeDRadius "<< degreeRadius << "  " <<endl ;
-
-            //radial degree
-            degreeRadius = -100;
-            //int newdegreeRadius = 0;
-            /*
-            for (int angleOffset=0; angleOffset<numSectors -1; angleOffset += 3) {
-			    radiusVector = M.sectorize_reg_radius(j,numSectors, angleOffset, angleOffset + numSectors/2, S[j].NN);
-			    newdegreeRadius = L.find_zeroRadius(radiusVector,3);
-			    if (newdegreeRadius > degreeRadius) {
-                    degreeRadius = newdegreeRadius;
-                }
-		    }
-            */
-	    radiusVector = M.sectorize_reg_radius(j,numSectors, angleOffset, numSectors, S[j].NN);
-	    degreeRadius = L.find_extrema(radiusVector,3);
-            gfile <<  " region "<< j << " degreeRadius  "<< degreeRadius << "  " <<endl << endl;
-            regionCount++;
+            avDegreeRadius += degreeRadius;
+            degfile1 << degreeAngle/2 << " " << degreeRadius << " " << zeroAng[0] << " " << zeroAng.size() << " " << M.regNNfrac(j) << " " << tempArea << " "<< tempPerimeter<<endl<<flush;
 #ifdef RANDOM
         } //end of if on non-zero regions
 #endif
-    } //end of loop on NUMPOINT
+    } //end of loop on NUMPOINTs
+    cout << "just before renewcorrelate_edges morph1 " << endl;
+    //avAbsCorrelation = M.correlate_edges(0);
+    M.random_correlate(max_comp, 1);
+    cout << "just after randomcorrelate_edges morph1 " << endl;
+    if (countRegions == 0) {
+        cout << "Error zero regionss counted in second analysis morph 0" << endl;
+        return -1;
+    }
+    avDegreeAngle = avDegreeAngle / (1.0 * countRegions);
+    avDegreeRadius = avDegreeRadius / (1.0 * countRegions);
+    avAbsCorrelation = avAbsCorrelation / (1.0 * countRegions);
+    occupancy = occupancy / (1.0 * countRegions);
+    cout << "Regions counted in first analysis loop " << countRegions << endl;
+    jfile <<Dn<< " "<<Dchi<<" "<<Dc<<" "<<avDegreeAngle<<" "<<avDegreeRadius<<" "<<occupancy<<" "<<avAbsCorrelation << endl;
 
-
-	      avDegreeAngle = 0;
-	      avDegreeRadius = 0;
-	      occupancy = 0;
-	      countRegions = 0;
-		  tempArea = 0;
-		  tempPerimeter = 0;
-		  avAbsCorrelation = 0;
-		  cout << "just after renewcorrelate_edges morph1 " << endl;
-          //avAbsCorrelation = M.correlate_edges(0);
-		  M.random_correlate(max_comp, 1);
-		  cout << "just after randomcorrelate_edges morph1 " << endl;
-          for (unsigned int j=0;j<numpoints;j++) {
-#ifdef RANDOM
-	        if (M.innerRegion[j]) {
-#endif
-	          countRegions++;
-		      occupancy += M.regNNfrac(j);
-              tempArea = M.regArea(j);
-              tempPerimeter = M.regPerimeter(j);
-
-              avAbsCorrelation += M.renewcorrelate_edges(j,1);
-              angleDVector = M.sectorize_reg_Dangle(j,numSectors,radiusOffset, numSectors, S[j].NN);
-              degreeAngle = L.find_zeroDAngle(angleDVector);
-		      avDegreeAngle += degreeAngle;
-              //radial degree
-		      degreeRadius = 0;
-              radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors, S[j].NN);
-              degreeRadius = L.find_zeroDRadius(radiusDVector);
-              avDegreeRadius += degreeRadius;
-              degfile1 << degreeAngle/2 << " " << degreeRadius << " " << M.regNNfrac(j) << " " << tempArea << " "<< tempPerimeter<<endl<<flush;
-#ifdef RANDOM
-	       } //end of if on non-zero regions
-#endif
-	    } //end of loop on NUMPOINTs
-      if (countRegions == 0) {
-          cout << "Error zero regionss counted in second analysis morph 0" << endl;
-          return -1;
-      }
-        avDegreeAngle = avDegreeAngle / (1.0 * countRegions);
-        avDegreeRadius = avDegreeRadius / (1.0 * countRegions);
-        avAbsCorrelation = avAbsCorrelation / (1.0 * countRegions);
-	    occupancy = occupancy / (1.0 * countRegions);
-        cout << "Regions counted in first analysis loop " << countRegions << endl;
-	    // jfile << avDegreeAngle <<" "<<avDegreeRadius<<endl;
-	    jfile <<Dn<< " "<<Dchi<<" "<<Dc<<" "<<avDegreeAngle<<" "<<avDegreeRadius<<" "<<occupancy<<" "<<avAbsCorrelation << endl;
-
-        // write the edge vectors all interpolated to a uniform size
-        std::map<int, vector<FLT>>::iterator ptr;
-        std::string sideNN = logpath + "/edgeNN.data";
-        int ecount = 0;
-        for (ptr = M.edgeNN.begin(); ptr != M.edgeNN.end(); ptr++) {
-            vector<FLT> tempVect;
-            tempVect = M.normaliseVect(ptr->second);
-            M.printFLTVect(sideNN, tempVect);
-            cout << "edgeNN key " << ptr->first << " element " << ecount << " vector size " << ptr->second.size() << " edges size " << M.edges[ptr->first].size() <<  endl;
-            ecount++;
-        }
+    // write the edge vectors all interpolated to a uniform size
+    std::map<int, vector<FLT>>::iterator ptr;
+    std::string sideNN = logpath + "/edgeNN.data";
+    int ecount = 0;
+    for (ptr = M.edgeNN.begin(); ptr != M.edgeNN.end(); ptr++) {
+        vector<FLT> tempVect;
+        tempVect = M.normaliseVect(ptr->second);
+        M.printFLTVect(sideNN, tempVect);
+        cout << "edgeNN key " << ptr->first << " element " << ecount << " vector size " << ptr->second.size() << " edges size " << M.edges[ptr->first].size() <<  endl;
+        ecount++;
+    }
 //end of integration after solving on polygonal regions via ksSolver
 
     /*
@@ -765,42 +720,68 @@ int main (int argc, char **argv)
         morph::HdfData ginput(gname,1);
         cout << "just after trying to open ../logs/second.h5" << endl;
         for (unsigned int j=0;j<numpoints;j++) {
-		    std::string ccstr = "c" + to_string(j);
-		    cout << " j string " << to_string(j) << " length" << ccstr.length()<< endl;
-			char * ccst = new char[ccstr.length()+1];
-			std::strcpy(ccst,ccstr.c_str());
-		    std::string nstr = "n" + to_string(j);
-			char * nst = new char[nstr.length()+1];
-			std::strcpy(nst,nstr.c_str());
-			cout << "labels "<< nst <<" , " << nstr <<","<< ccst<< "," << ccstr <<endl;
-	        ginput.read_contained_vals(ccst,S[j].CC);
-	        ginput.read_contained_vals(nst,S[j].NN);
-		}
+            std::string ccstr = "c" + to_string(j);
+            cout << " j string " << to_string(j) << " length" << ccstr.length()<< endl;
+            char * ccst = new char[ccstr.length()+1];
+            std::strcpy(ccst,ccstr.c_str());
+            std::string nstr = "n" + to_string(j);
+            char * nst = new char[nstr.length()+1];
+            std::strcpy(nst,nstr.c_str());
+            cout << "labels "<< nst <<" , " << nstr <<","<< ccst<< "," << ccstr <<endl;
+            ginput.read_contained_vals(ccst,S[j].CC);
+            ginput.read_contained_vals(nst,S[j].NN);
+        }
     }
     else {
-        for (unsigned int j=0;j<numpoints;j++) {
-	        for (auto h : S[j].Hgrid->hexen) {
+        for (auto h : S[23].Hgrid->hexen) {
             // boundarySigmoid. Jumps sharply (100, larger is sharper) over length
             // scale 0.05 to 1. So if distance from boundary > 0.05, noise has
             // normal value. Close to boundary, noise is less.
-		        FLT choice = ruf.get();
-		        if (choice > 0.5) {
-                    S[j].NN[h.vi] = - ruf.get() * aNoiseGain +nnInitialOffset;
-                    S[j].CC[h.vi] = - ruf.get() * aNoiseGain + ccInitialOffset;
-				}
-		        else {
-                    S[j].NN[h.vi] = ruf.get() * aNoiseGain +nnInitialOffset;
-                    S[j].CC[h.vi] = ruf.get() * aNoiseGain + ccInitialOffset;
-				}
-                if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
-                    FLT bSig = 1.0 / ( 1.0 + exp (-100.0*(h.distToBoundary- boundaryFalloffDist)) );
-                    S[j].NN[h.vi] = (S[j].NN[h.vi] - nnInitialOffset) * bSig + nnInitialOffset;
-                    S[j].CC[h.vi] = (S[j].CC[h.vi] - ccInitialOffset) * bSig + ccInitialOffset;
-        //            S[j].NN[h.vi] = S[j].NN[h.vi] * bSig;
-        //            S[j].CC[h.vi] = S[j].CC[h.vi] * bSig;
-	    	    } //end of if on boundary distance
-	        }//end of loop over region
-	    }//end of loop over all regions
+            FLT choice = ruf.get();
+            if (choice > 0.5) {
+                S[23].NN[h.vi] = - ruf.get() * aNoiseGain +nnInitialOffset;
+                S[23].CC[h.vi] = - ruf.get() * aNoiseGain + ccInitialOffset;
+            }
+            else {
+                S[23].NN[h.vi] = ruf.get() * aNoiseGain +nnInitialOffset;
+                S[23].CC[h.vi] = ruf.get() * aNoiseGain + ccInitialOffset;
+            }
+            if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
+                FLT bSig = 1.0 / ( 1.0 + exp (-100.0*(h.distToBoundary- boundaryFalloffDist)) );
+                S[23].NN[h.vi] = (S[23].NN[h.vi] - nnInitialOffset) * bSig + nnInitialOffset;
+                S[23].CC[h.vi] = (S[23].CC[h.vi] - ccInitialOffset) * bSig + ccInitialOffset;
+            } //end of if on boundary distance
+        }//end of loop over region
+        for (unsigned int j=0; j<numpoints; j++) {
+            for (auto h : S[j].Hgrid->hexen) {
+                S[j].NN[h.vi] = S[23].NN[h.vi];
+                S[j].CC[h.vi] = S[23].CC[h.vi];
+            }//end of loop over region
+        }//end of loop over all region
+    /*
+        for (unsigned int j=0;j<numpoints;j++) {
+            for (auto h : S[j].Hgrid->hexen) {
+            // boundarySigmoid. Jumps sharply (100, larger is sharper) over length
+            // scale 0.05 to 1. So if distance from boundary > 0.05, noise has
+            // normal value. Close to boundary, noise is less.
+            FLT choice = ruf.get();
+            if (choice > 0.5) {
+                S[j].NN[h.vi] = - ruf.get() * aNoiseGain +nnInitialOffset;
+                S[j].CC[h.vi] = - ruf.get() * aNoiseGain + ccInitialOffset;
+            }
+            else {
+                S[j].NN[h.vi] = ruf.get() * aNoiseGain +nnInitialOffset;
+                S[j].CC[h.vi] = ruf.get() * aNoiseGain + ccInitialOffset;
+            }
+            if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
+                FLT bSig = 1.0 / ( 1.0 + exp (-100.0*(h.distToBoundary- boundaryFalloffDist)) );
+                S[j].NN[h.vi] = (S[j].NN[h.vi] - nnInitialOffset) * bSig + nnInitialOffset;
+                S[j].CC[h.vi] = (S[j].CC[h.vi] - ccInitialOffset) * bSig + ccInitialOffset;
+                S[j].NN[h.vi] = S[j].NN[h.vi] * bSig;
+                S[j].CC[h.vi] = S[j].CC[h.vi] * bSig;
+            } //end of if on boundary distance
+        }//end of loop over region
+    */
     } //end of else on Lcontinue
     cout <<  "just after field creation first morph" << endl;
 #ifdef COMPILE_PLOTTING
@@ -983,21 +964,16 @@ int main (int argc, char **argv)
     //first save the  ofstream outFile;
     cout << "just before second data read " << endl;
     morph::HdfData gdata(gname);
-	for (unsigned int j=0;j<numpoints;j++)
-	{
-		std::string nstr = "n" + to_string(j);
-	    char * nst = new char[nstr.length()+1];
-		//std::copy(nstr.begin(),nstr.end(),nst);
-		std::strcpy(nst,nstr.c_str());
-    	std::string ccstr = "c" + to_string(j);
-	    char * ccst = new char[ccstr.length()+1];
-	//	std::copy(ccstr.begin(),ccstr.end(),cst);
-		std::strcpy(ccst,ccstr.c_str());
-		cout << "labels "<< nst <<" , " << nstr <<","<< ccst<< "," << ccstr <<endl;
+    for (unsigned int j=0;j<numpoints;j++) {
+        std::string nstr = "n" + to_string(j);
+        char * nst = new char[nstr.length()+1];
+        std::strcpy(nst,nstr.c_str());
+        std::string ccstr = "c" + to_string(j);
+        char * ccst = new char[ccstr.length()+1];
+        std::strcpy(ccst,ccstr.c_str());
+        cout << "labels "<< nst <<" , " << nstr <<","<< ccst<< "," << ccstr <<endl;
         gdata.add_contained_vals(ccst,S[j].CC);
         gdata.add_contained_vals(nst,S[j].NN);
-        //data.add_contained_vals("X",M.X[0]);
-        //data.add_contained_vals("Y",M.X[1]);
      }
      gdata.add_val ("/Dchi", Dchi);
      gdata.add_val ("/Dn", Dn);
@@ -1009,50 +985,6 @@ int main (int argc, char **argv)
     angleDVector.resize(0);
     angleVector.resize(0);
     radiusVector.resize(0);
-      for (unsigned int j=0;j<numpoints;j++) {
-          M.NN[j] = S[j].NN; // first fill the DRegion NN values
-#ifdef RANDOM
-              if (M.innerRegion[j]){
-#endif
-			      int regionCount = 0;
-                  gfile<<"in the degree loop" << endl;
-                  //angle degree
-                  tempArea = M.regArea(j);
-                  tempPerimeter = M.renewRegPerimeter(j);
-
-                  // digital version
-                  angleDVector = M.sectorize_reg_Dangle(j,numSectors,radiusOffset, numSectors, S[j].NN);
-                  degreeAngle = L.find_zeroDAngle(angleDVector);
-                  gfile << "region "<< j << " degreeDAngle "<< degreeAngle << "  " << tempArea<< "  "<< tempPerimeter<<endl<<flush;
-
-                  // analogue version
-                  angleVector = M.sectorize_reg_angle(j,numSectors,radiusOffset, numSectors, S[j].NN);
-                  //angleVector = L.meanzero_vector(angleVector);
-                  //degreeAngle = M.find_max(angleVector,3);
-                  degreeAngle = L.find_extrema(angleVector,3);
-                  gfile << "region "<< j << " degreeAngle "<< degreeAngle << "  " << tempArea<< "  "<< tempPerimeter<<endl<<flush;
-                  //radial degree
-                  degreeRadius = -100;
-                  radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors, S[j].NN);
-                  //gfile <<"after sectorize_reg_radius"<<endl;
-                  // radiusVector = M.meanzero_vector(radiusVector);
-
-                  degreeRadius = L.find_zeroDRadius(radiusDVector);
-                  gfile  << "region "<< j << " degreeDRadius "<< degreeRadius << "  " <<endl ;
-
-                  ///radial degree
-                  degreeRadius = -100;
-
-                  radiusVector = M.sectorize_reg_radius(j,numSectors, angleOffset, numSectors, S[j].NN);
-	          degreeRadius = L.find_extrema(radiusVector,3);
-                  gfile <<  " region "<< j << " degreeRadius  "<< degreeRadius << "  " <<endl << endl;
-
-
-                  regionCount++;
-#ifdef RANDOM
-        } //end of if on non-zero regions
-#endif
-    } //end of loop on NUMPOINT
 
 
     M.edges_clear();
@@ -1067,50 +999,64 @@ int main (int argc, char **argv)
     cout << "Edges size " << M.edges.size() << endl;
 
 
-	      avDegreeAngle = 0;
-	      avDegreeRadius = 0;
-	      occupancy = 0;
-	      countRegions = 0;
-		  tempArea = 0;
-		  tempPerimeter = 0;
-		  avAbsCorrelation = 0;
-		  M.random_correlate(max_comp,2);
-		  cout << "just after randomcorrelate_edges morph1 " << endl;
-          for (unsigned int j=0;j<numpoints;j++) {
+    avDegreeAngle = 0;
+    avDegreeRadius = 0;
+    occupancy = 0;
+    countRegions = 0;
+    tempArea = 0;
+    tempPerimeter = 0;
+    avAbsCorrelation = 0;
+    M.random_correlate(max_comp,2);
+    cout << "just after randomcorrelate_edges morph1 " << endl;
+    for (unsigned int j=0;j<numpoints;j++) {
+        M.NN[j] = S[j].NN; //write the NN fields to the DRegion array
+    }
+    for (unsigned int j=0;j<numpoints;j++) {
 #ifdef RANDOM
-	        if (M.innerRegion[j])
-			{
+        if (M.innerRegion[j]) {
 #endif
-	          countRegions++;
-		      occupancy += M.regNNfrac(j);
-              tempArea = M.regArea(j);
-              tempPerimeter = M.regPerimeter(j);
-
-              avAbsCorrelation += M.renewcorrelate_edges(j,2);
-              angleDVector = M.sectorize_reg_Dangle(j,numSectors,radiusOffset, numSectors, S[j].NN);
-              degreeAngle = L.find_zeroDAngle(angleDVector);
-		      avDegreeAngle += degreeAngle;
-              //radial degree
-		      degreeRadius = 0;
-              radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors, S[j].NN);
-              degreeRadius = L.find_zeroDRadius(radiusDVector);
-              avDegreeRadius += degreeRadius;
-
-              degfile2 << degreeAngle/2 << " " << degreeRadius << " " << M.regNNfrac(j) << " " << tempArea << " "<< tempPerimeter<<endl<<flush;
+            countRegions++;
+            occupancy += M.regNNfrac(j);
+            tempArea = M.regArea(j);
+            tempPerimeter = M.regPerimeter(j);
+            avAbsCorrelation += M.renewcorrelate_edges(j,2);
+            M.sortRegionBoundary(j);
+            vector<FLT> bdryNN = L.meanzero_vector(M.sortedBoundaryNN[j]);
+            gfile << " zeros round boundary region " << j << " is " << L.find_zeroAngle(bdryNN, 0) << std::endl;
+            std::vector<int> zeroIndices = L.find_zeroIndices(bdryNN);
+            std::vector<FLT> zeroAng;
+            zeroAng.resize(zeroIndices.size());
+            gfile << " size of zeroIndices " << zeroIndices.size() << " sortedBoundaryNN size " << M.sortedBoundaryNN[j].size() << std::endl;
+            for (unsigned int i=0; i<zeroAng.size(); i++) {
+                zeroAng[i] = M.sortedBoundaryPhi[j][zeroIndices[i]];
+                gfile << "region " << j << " zeroAng " << zeroAng[i] << std::endl;
+            }
+            angleDVector = M.sectorize_reg_Dangle(j,numSectors,radiusOffset, numSectors, S[j].NN);
+            degreeAngle = L.find_zeroDAngle(angleDVector);
+            avDegreeAngle += degreeAngle;
+            //radial degree
+            degreeRadius = 0;
+            radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors, S[j].NN);
+            degreeRadius = L.find_zeroDRadius(radiusDVector);
+            avDegreeRadius += degreeRadius;
+            degfile2 << degreeAngle/2 << " " << degreeRadius << " " << zeroAng[0] << " " << zeroAng.size() << " " << M.regNNfrac(j) << " " << tempArea << " "<< tempPerimeter<<endl<<flush;
     #ifdef RANDOM
-	       } //end of if on non-zero regions
+        } //end of if on non-zero regions
     #endif
-	    } //end of loop on NUMPOINTs
-      if (countRegions == 0) {
-          cout << "Error zero regionss counted in third analysis morph 1" << endl;
-          return -1;
-      }
-        avDegreeAngle = avDegreeAngle / (1.0 * countRegions);
-        avDegreeRadius = avDegreeRadius / (1.0 * countRegions);
-        avAbsCorrelation = avAbsCorrelation / (1.0 * countRegions);
-	    occupancy = occupancy / (1.0 * countRegions);
-	    // jfile << avDegreeAngle <<" "<<avDegreeRadius<<endl;
-	    jfile <<Dn<< " "<<Dchi<<" "<<Dc<<" "<<avDegreeAngle<<" "<<avDegreeRadius<<" "<<occupancy<<" "<<avAbsCorrelation << endl;
+    } //end of loop on NUMPOINTs
+    cout << "just before renewcorrelate_edges morph1 " << endl;
+    //avAbsCorrelation = M.correlate_edges(0);
+    M.random_correlate(max_comp, 1);
+    cout << "just after randomcorrelate_edges morph1 " << endl;
+    if (countRegions == 0) {
+        cout << "Error zero regionss counted in third analysis morph 1" << endl;
+        return -1;
+    }
+    avDegreeAngle = avDegreeAngle / (1.0 * countRegions);
+    avDegreeRadius = avDegreeRadius / (1.0 * countRegions);
+    avAbsCorrelation = avAbsCorrelation / (1.0 * countRegions);
+    occupancy = occupancy / (1.0 * countRegions);
+    jfile <<Dn<< " "<<Dchi<<" "<<Dc<<" "<<avDegreeAngle<<" "<<avDegreeRadius<<" "<<occupancy<<" "<<avAbsCorrelation << endl;
 //end of integration after first morphing
 //begin second morphing
     if (skipMorph) return 0;
@@ -1124,7 +1070,7 @@ int main (int argc, char **argv)
         cout << "in the loop populating the ksVector morph2 "<< j <<endl;
     }
     cout << "just after populating the ksVector"<<endl;
-	// repopulate the regions
+    // repopulate the regions
     for (unsigned int j=0;j<numpoints;j++)
     {
             M.renewRegion(j,S[j].Hgrid->hexen);
@@ -1181,6 +1127,32 @@ int main (int argc, char **argv)
             }
 	 }
      else {
+         for (auto h : S[23].Hgrid->hexen) {
+            // boundarySigmoid. Jumps sharply (100, larger is sharper) over length
+            // scale 0.05 to 1. So if distance from boundary > 0.05, noise has
+            // normal value. Close to boundary, noise is less.
+            FLT choice = ruf.get();
+            if (choice > 0.5) {
+                S[23].NN[h.vi] = - ruf.get() * aNoiseGain +nnInitialOffset;
+                S[23].CC[h.vi] = - ruf.get() * aNoiseGain + ccInitialOffset;
+            }
+            else {
+                S[23].NN[h.vi] = ruf.get() * aNoiseGain +nnInitialOffset;
+                S[23].CC[h.vi] = ruf.get() * aNoiseGain + ccInitialOffset;
+            }
+            if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
+                FLT bSig = 1.0 / ( 1.0 + exp (-100.0*(h.distToBoundary- boundaryFalloffDist)) );
+                S[23].NN[h.vi] = (S[23].NN[h.vi] - nnInitialOffset) * bSig + nnInitialOffset;
+                S[23].CC[h.vi] = (S[23].CC[h.vi] - ccInitialOffset) * bSig + ccInitialOffset;
+            } //end of if on boundary distance
+        }//end of loop over hexen
+            for (unsigned int j=0; j<numpoints; j++) {
+                for (auto h : S[j].Hgrid->hexen) {
+                    S[j].NN[h.vi] = S[23].NN[h.vi];
+                    S[j].CC[h.vi] = S[23].CC[h.vi];
+                }//end of loop over region
+            }//end of loop over all region
+/*
         for (unsigned int j=0;j<numpoints;j++) {
             for (auto h : S[j].Hgrid->hexen) {
             // boundarySigmoid. Jumps sharply (100, larger is sharper) over length
@@ -1204,6 +1176,7 @@ int main (int argc, char **argv)
                 } //end of if on boundary distance
             }//end of loop over region
         }//end of loop over all regions
+*/
      } //end of else on Lcontinue
 #ifdef COMPILE_PLOTTING
     morph::Visual * v3;
@@ -1211,12 +1184,6 @@ int main (int argc, char **argv)
     // Set a white background . This value has the order
     // 'RGBA', though the A(alpha) makes no difference.
     v3->backgroundWhite();
-    /*
-    //orthographic projection
-    v3->ptype = morph::perspective_type::orthographic;
-    v3->ortho_bl = {-1.0f, -1.0f};
-    v3->ortho_tr = {1.0f, 1.0f};
-    */
     // You can tweak the near and far clipping planes
     v3->zNear = 0.001;
     v3->zFar = 500;
@@ -1372,14 +1339,6 @@ int main (int argc, char **argv)
         cout << " after rendering the graphics " << endl;
     }
 
-        // rendering the graphics. After each simulation step, check if enough time
-        // has elapsed for it to be necessary to call v3.render().
-     //   steady_clock::duration sincerender = steady_clock::now() - lastrender;
-     //   if (duration_cast<milliseconds>(sincerender).count() > 17000) { // 17 is about 60 Hz
-     //       glfwPollEvents();
-     //       v3->render();
-     //       lastrender = steady_clock::now();
-    //}
 #endif
 } //end of numsteps loop
 
@@ -1389,18 +1348,18 @@ int main (int argc, char **argv)
     cout << "just before the fourth data write" << endl;
     //first save the  ofstream outFile;
     morph::HdfData hdata(hname);
-	cout <<"after creating hdata "<< hname << endl;
-	for (unsigned int j=0;j<numpoints;j++) {
-		std::string nstr = "n" + to_string(j);
-	   	char * nst = new char[nstr.length()+1];
-		std::strcpy(nst,nstr.c_str());
-		std::string ccstr = "c" + to_string(j);
-	    char * ccst = new char[ccstr.length()+1];
-		std::strcpy(ccst,ccstr.c_str());
-		cout <<"in third hdf5 write "<<nstr <<" , "<<ccstr<<endl;
+    cout <<"after creating hdata "<< hname << endl;
+    for (unsigned int j=0;j<numpoints;j++) {
+        std::string nstr = "n" + to_string(j);
+        char * nst = new char[nstr.length()+1];
+        std::strcpy(nst,nstr.c_str());
+        std::string ccstr = "c" + to_string(j);
+        char * ccst = new char[ccstr.length()+1];
+        std::strcpy(ccst,ccstr.c_str());
+        cout <<"in third hdf5 write "<<nstr <<" , "<<ccstr<<endl;
         hdata.add_contained_vals(ccst,S[j].CC);
         hdata.add_contained_vals(nst,S[j].NN);
-	}
+    }
     //data.add_contained_vals("X",M.X[0]);
     //data.add_contained_vals("Y",M.X[1]);
     // hdata.add_val ("/Dchi", Dchi);
@@ -1413,95 +1372,70 @@ int main (int argc, char **argv)
     angleDVector.resize(0);
     angleVector.resize(0);
     radiusVector.resize(0);
-    for (unsigned int j=0;j<numpoints;j++) {
-        M.NN[j] = S[j].NN;
-#ifdef RANDOM
-	    if (M.innerRegion[j]) {
-#endif
-	        int regionCount = 0;
-            gfile<<"in the degree loop" << endl;
-	        //angle degree
-            tempArea = M.regArea(j);
-            tempPerimeter = M.renewRegPerimeter(j);
-            // digital version
-            angleDVector = M.sectorize_reg_Dangle(j,numSectors,radiusOffset, numSectors, S[j].NN);
-            degreeAngle = L.find_zeroDAngle(angleDVector);
-            gfile << "region "<< j << " degreeDAngle "<< degreeAngle << "  " << tempArea<< "  "<< tempPerimeter<<endl<<flush;
-
-           // analogue version
-            angleVector = M.sectorize_reg_angle(j,numSectors,radiusOffset, numSectors, S[j].NN);
-            //angleVector = L.meanzero_vector(angleVector);
-            //degreeAngle = M.find_max(angleVector,3);
-            degreeAngle = L.find_extrema(angleVector,3);
-            gfile << "region "<< j << " degreeAngle "<< degreeAngle << "  " << tempArea<< "  "<< tempPerimeter<<endl<<flush;
-            //radial degree
-            degreeRadius = -100;
-            radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors, S[j].NN);
-            //gfile <<"after sectorize_reg_radius"<<endl;
-            degreeRadius = L.find_zeroDRadius(radiusDVector);
-            gfile  << "region "<< j << " degreeDRadius "<< degreeRadius << "  " <<endl;
-            //radial degree
-            degreeRadius = -100;
-	    radiusVector = M.sectorize_reg_radius(j,numSectors, angleOffset, numSectors, S[j].NN);
-	    degreeRadius = L.find_extrema(radiusVector,3);
-            gfile <<  " region "<< j << " degreeRadius  "<< degreeRadius << "  " <<endl << endl;
-            regionCount++;
-#ifdef RANDOM
-        } //end of if on non-zero regions
-#endif
-    } //end of loop on NUMPOINT
 
 //computing average values over all regions
     avDegreeAngle = 0;
-	avDegreeRadius = 0;
-	occupancy = 0;
+    avDegreeRadius = 0;
+    occupancy = 0;
     avAbsCorrelation = 0;
-	tempPerimeter = 0;
-	tempArea = 0;
-	countRegions = 0;
-	M.random_correlate(max_comp, 3);
-	cout << "just after random correlate_edges morph2 " << endl;
+    tempPerimeter = 0;
+    tempArea = 0;
+    countRegions = 0;
+    M.random_correlate(max_comp, 3);
+    cout << "just after random correlate_edges morph2 " << endl;
     radiusDVector.resize(0);
     angleDVector.resize(0);
     angleVector.resize(0);
     radiusVector.resize(0);
     for (unsigned int j=0;j<numpoints;j++) {
+        M.NN[j] = S[j].NN; //write the NN fields to the DRegion array
+    }
+    for (unsigned int j=0;j<numpoints;j++) {
 #ifdef RANDOM
-	    if (M.innerRegion[j]){
+        if (M.innerRegion[j]){
 #endif
             countRegions++;
             avAbsCorrelation += M.renewcorrelate_edges(j,3);
             occupancy += M.regNNfrac(j);
-            cout << "after renNNfrac " << endl;
             tempArea = M.regArea(j);
-            cout << " after regArea " << endl;
             tempPerimeter = M.regPerimeter(j);
-            cout << " after regPerimeter " << endl;
-            cout << "before sectorixe Dangle morph2 " << endl;
+            M.sortRegionBoundary(j);
+            vector<FLT> bdryNN = L.meanzero_vector(M.sortedBoundaryNN[j]);
+            gfile << " zeros round boundary region " << j << " is " << L.find_zeroAngle(bdryNN, 0) << std::endl;
+            std::vector<int> zeroIndices = L.find_zeroIndices(bdryNN);
+            std::vector<FLT> zeroAng;
+            zeroAng.resize(zeroIndices.size());
+            gfile << " size of zeroIndices " << zeroIndices.size() << " sortedBoundaryNN size " << M.sortedBoundaryNN[j].size() << std::endl;
+            for (unsigned int i=0; i<zeroAng.size(); i++) {
+                zeroAng[i] = M.sortedBoundaryPhi[j][zeroIndices[i]];
+                gfile << "region " << j << " zeroAng " << zeroAng[i] << std::endl;
+            }
             angleDVector = M.sectorize_reg_Dangle(j,numSectors,radiusOffset, numSectors, S[j].NN);
-            cout << "after sectorixe Dangle morph2 " << endl;
             degreeAngle = L.find_zeroDAngle(angleDVector);
             avDegreeAngle += degreeAngle;
-            cout << "after sectorixe Dangle morph2 " << endl;
             //radial degree
             degreeRadius = 0;
             radiusDVector = M.sectorize_reg_Dradius(j,numSectors, angleOffset, angleOffset + numSectors, S[j].NN);
             degreeRadius = L.find_zeroDRadius(radiusDVector);
             avDegreeRadius += degreeRadius;
-            degfile3 << degreeAngle/2 << " " << degreeRadius << " " << M.regNNfrac(j) << " " << tempArea << " " << tempPerimeter<<endl<<flush;
+            degfile3 << degreeAngle/2 << " " << degreeRadius << " " << zeroAng[0] << " " << zeroAng.size() << " " << M.regNNfrac(j) << " " << tempArea << " "<< tempPerimeter<<endl<<flush;
 #ifdef RANDOM
          } //end of if on non-zero regions
 #endif
     } //end of loop on NUMPOINTs
+    cout << "just before renewcorrelate_edges morph1 " << endl;
+    //avAbsCorrelation = M.correlate_edges(0);
+    M.random_correlate(max_comp, 1);
+    cout << "just after randomcorrelate_edges morph1 " << endl;
     if (countRegions == 0) {
-        cout << "Error zero regionss counted in fourth analysis morph 2" << endl;
+        cout << "Error zero regionss counted in third analysis morph 2" << endl;
         return -1;
     }
     avDegreeAngle = avDegreeAngle / (1.0 * countRegions);
     avDegreeRadius = avDegreeRadius / (1.0 * countRegions);
-	occupancy = occupancy / (1.0 * countRegions);
+    occupancy = occupancy / (1.0 * countRegions);
     avAbsCorrelation = avAbsCorrelation/(1.0 * countRegions);
-	jfile <<Dn<<"  "<<Dchi<<" "<<Dc<<" "<<avDegreeAngle<<" "<<avDegreeRadius<<" "<<occupancy<<" "<<avAbsCorrelation  <<endl;
+    jfile <<Dn<<"  "<<Dchi<<" "<<Dc<<" "<<avDegreeAngle<<" "<<avDegreeRadius<<" "<<occupancy<<" "<<avAbsCorrelation  <<endl;
     cout << "end of program reached successfully!" << endl;
     return 0;
 };
