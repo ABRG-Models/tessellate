@@ -2513,7 +2513,7 @@ FLT regnnfrac (int regNum) {
           FLT minradius = 100000.0;
           int count = 0;
           FLT boundDist;
-          for (auto h : this->regionHex[regNum]) {
+          for (auto h : this->regionBound[regNum]) {
               if (Creg[h.vi] > 0) {
                    count++;
                    boundHex.first = h.x,
@@ -2544,7 +2544,7 @@ FLT regnnfrac (int regNum) {
          }
          FLT maxradius = -100000.0;
          int count=0;
-         for (auto h : this->regionHex[regNum]) {
+         for (auto h : this->regionBound[regNum]) {
                  count++;
                  boundHex.first = h.x,
                  boundHex.second = h.y;

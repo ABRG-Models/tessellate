@@ -125,8 +125,9 @@ int main (int argc, char **argv)
         float xspan = conf.getFloat("xspan",5.0);
         float boundaryFalloffDist = conf.getFloat("boundaryFalloffDist",0.0078);
         float aNoiseGain = conf.getFloat("aNoiseGain",0.1);
-        float nnInitialOffset = conf.getFloat("nnInitialOffet", 1.0);
+        float nnInitialOffset = conf.getFloat("nnInitialOffset", 0.0);
         float ccInitialOffset = conf.getFloat("ccInitialOffset",2.5);
+        float lengthScale = conf.getFloat("lengthScale",29.0);
 #else
         double dt = conf.getDouble("dt",0.0001);
         double Dn = conf.getDouble("Dn",1.0);
@@ -135,8 +136,9 @@ int main (int argc, char **argv)
         double xspan = conf.getDouble("xspan",5.0);
         double boundaryFalloffDist = conf.getDouble("boundaryFalloffDist",0.0078);
         double aNoiseGain = conf.getDouble("aNoiseGain",0.1);
-        double nnInitialOffset = conf.getDouble("nnInitialOffet", 1.0);
+        double nnInitialOffset = conf.getDouble("nnInitialOffset", 0.0);
         double ccInitialOffset = conf.getDouble("ccInitialOffset",2.5);
+        double lengthScale = ("lengthScale", 29.0);
 #endif
     int numSectors = conf.getInt("numsectors",12);
     int scale = conf.getInt("scale",8);
@@ -149,23 +151,26 @@ int main (int argc, char **argv)
     //bool overwrite_logs = conf.getBool("overwrite_logs",true);
     bool skipMorph  = conf.getBool("skipMorph",false);
     bool Lcontinue = conf.getBool("Lcontinue",false);
+    bool lBoundZero = conf.getBool("lBoundZero", false);
     unsigned int numpoints = conf.getInt("numpoints",41);
+    unsigned int fov = conf.getInt("fov", 10);
     cout << " Lcontinue " << Lcontinue << " skipMorph " << skipMorph << endl;
     ofstream afile (logpath + "/centroids.out",ios::app);
     // adjust the number of steps according to the Dn number
     //numsteps = numsteps * floor(sqrt(36.0/Dn));
     //numprint  = numprint * floor(sqrt(36.0/Dn));
     // adjust the time step for the Dn values
-    dt = dt * sqrt(Dn/36.0);
     //set up a vtxVisual pointer
 
+    std::cout << "LfixedSeed = " << LfixedSeed << std::endl;
+    std::cout << "nnInitial " << nnInitialOffset << " ccInitial " << ccInitialOffset << std::endl;
     unsigned int seed;
-    if (LfixedSeed) {
-        seed = 1;
-    }
-    else {
-        seed = time(NULL);
-    }
+    chrono::milliseconds ms1 = duration_cast<milliseconds>(system_clock::now().time_since_epoch());
+    if (LfixedSeed)
+        seed = 596927;
+    else
+        seed = static_cast<unsigned int> (ms1.count());
+
 
     // A ra2yyndo2yym uniform generator returning real/FLTing point types
     morph::RandUniform<FLT> ruf(seed);
@@ -186,12 +191,12 @@ int main (int argc, char **argv)
  * Initialise ksSolver
  */
 
-    morph::ReadCurves r("./polygon.svg");
+    morph::ReadCurves r("./whiskerbarrels.svg");
     BezCurvePath<FLT> bound = r.getCorticalPath();
     std::pair<FLT,FLT> centroid = std::make_pair(0.0,0.0);
     FLT radius = 1.0;
-   // S = ksSolver(scale, xspan, logpath, bound, centroid);
-    S = ksSolver(scale, xspan, logpath, radius, centroid);
+    S = ksSolver(scale, xspan, logpath, bound, centroid, lengthScale);
+    //S = ksSolver(scale, xspan, logpath, radius, centroid, lengthScale);
 
 // initialise the fields
     string fname = logpath + "/first.h5";
@@ -222,13 +227,23 @@ int main (int argc, char **argv)
                 S.NN[h.vi] = ruf.get() * aNoiseGain +nnInitialOffset;
                 S.CC[h.vi] = ruf.get() * aNoiseGain + ccInitialOffset;
 	    } //end of if on +-
-            if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
-                FLT bSig = 1.0 / ( 1.0 + exp (-100.0*(h.distToBoundary- boundaryFalloffDist)) );
-                //S.NN[h.vi] = (S.NN[h.vi] - nnInitialOffset) * bSig + nnInitialOffset;
-                //S.CC[h.vi] = (S.CC[h.vi] - ccInitialOffset) * bSig + ccInitialOffset;
-                S.NN[h.vi] = S.NN[h.vi] * bSig;
-                S.CC[h.vi] = S.CC[h.vi] * bSig;
-	    } //end of if on boundary distance
+            FLT bSig = 1.0 / ( 1.0 + exp (-10000.0*(h.distToBoundary- boundaryFalloffDist)) );
+            if (h.boundaryHex()) {
+                cout << "h.vi " << h.vi << " dist to boundary " << h.distToBoundary << " bSig " << bSig << std::endl;
+            }
+
+            if (lBoundZero) {
+                if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
+                    S.NN[h.vi] = S.NN[h.vi] * bSig;
+                    S.CC[h.vi] = S.CC[h.vi] * bSig;
+                }
+            }
+            else {
+                if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
+                    S.NN[h.vi] = (S.NN[h.vi] - nnInitialOffset) * bSig + nnInitialOffset;
+                    S.CC[h.vi] = (S.CC[h.vi] - ccInitialOffset) * bSig + ccInitialOffset;
+                } //end of if on boundary distance
+            } //end of if on lBoundZero
         }//end of loop over HexGrid
     } //end of else on Lcontinue
      cout <<  "just after field creation first morph" << endl;
@@ -236,7 +251,7 @@ int main (int argc, char **argv)
  #ifdef COMPILE_PLOTTING
 // now draw the intial tesselation
     // Parameters from the config that apply only to plotting:
-    const unsigned int plotevery = conf.getUInt ("plotevery", 10);
+    const unsigned int plotEvery = conf.getUInt ("plotevery", 10);
     // Should the plots be saved as png images?
     const bool saveplots = conf.getBool ("saveplots", true);
     // If true, then write out the logs in consecutive order numbers,
@@ -259,7 +274,7 @@ int main (int argc, char **argv)
     v1.zNear = 0.001;
     v1.zFar = 500;
     // And the field of view of the visual scene.
-    v1.fov = 45;
+    v1.fov = fov;
     // You can lock movement of the scene
     v1.sceneLocked = conf.getBool ("sceneLocked", false);
     // You can set the default scene x/y/z offsets
@@ -293,6 +308,8 @@ int main (int argc, char **argv)
 
     // Set up a 3D map of the surface RD.n[0] using a morph::HexGridVisual
 //    spatOff[0] -= 0.6 * (S.Hgrid->width());
+    spatOff[0] = -S.Hgrid->width();
+    spatOff[1] = 0.0;
     morph::HexGridVisual<FLT>* hgv1 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
     hgv1->setSizeScale (myscale, myscale);
     hgv1->setScalarData (&S.NN);
@@ -309,7 +326,7 @@ int main (int argc, char **argv)
     std::cout << "end of first visual block" << std::endl;
 
     // Set up a 3D map of the surface RD.c[0]
-    spatOff[0] -= S.Hgrid->width();
+    spatOff[0] = 0.0;
     morph::HexGridVisual<FLT>* hgv2 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
     hgv2->setSizeScale (myscale, myscale);
     hgv2->setScalarData (&S.NN);
@@ -326,9 +343,27 @@ int main (int argc, char **argv)
     std::chrono::steady_clock::time_point lastrender = steady_clock::now();
     std::cout << "end of  second visual block" << std::endl;
 
+    // Set up a 3D map of the surface RD.n[0] using a morph::HexGridVisual
+//    spatOff[0] -= 0.6 * (S.Hgrid->width());
+    spatOff[0] = S.Hgrid->width();
+    morph::HexGridVisual<FLT>* hgv3 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
+    hgv3->setSizeScale (myscale, myscale);
+    hgv3->setScalarData (&S.CC);
+    // You can directly set VisualDataModel::zScale and ::colourScale:
+    hgv3->zScale.setParams (_m/10.0f, _c/10.0f);
+    // ...or use setters to copy one in:
+    hgv3->setCScale (cscale);
+    hgv3->cm.setType (morph::ColourMapType::Jet);
+    hgv3->hexVisMode = morph::HexVisMode::Triangles;
+    //hgv1->addLabel ("n (axon density)", {-0.6f, 2.0*S.Hgrid->width(), 0},
+    //                morph::colour::white, morph::VisualFont::Vera, 0.12f, 10);
+    hgv3->finalize();
+    v1.addVisualModel (hgv3);
+    std::cout << "end of third visual block" << std::endl;
+
 #endif
 
-    std::cout << "numsteps " << numsteps << " plotevery " << plotevery <<  std::endl;
+    std::cout << "numsteps " << numsteps << " plotevery " << plotEvery <<  std::endl;
     // begin morph0 time stepping loop
     std::pair<FLT, FLT> mm; // maxmin
     for (int i=0;i<numsteps;i++) {
@@ -336,20 +371,24 @@ int main (int argc, char **argv)
 #ifdef COMPILE_PLOTTING
         if ((i % numprint) == 0) {
             //scale NN
-            mm = morph::MathAlgo::maxmin (S.CC);
-            std::cout << "CC range: " << std::abs(mm.second - mm.first) << std::endl;
+            mm = morph::MathAlgo::maxmin (S.NN);
+            std::cout << "NN range: " << std::abs(mm.second - mm.first) << std::endl;
             hgv1->colourScale.compute_autoscale (mm.second, mm.first);
             //scale lapNN
-            mm = morph::MathAlgo::maxmin (S.lapCC);
-            std::cout << "lapCC min: " << mm.first << " lapCC max " << mm.second << std::endl;
+            mm = morph::MathAlgo::maxmin (S.lapNN);
+            std::cout << "lapNN min: " << mm.first << " lapNN max " << mm.second << std::endl;
             hgv2->colourScale.compute_autoscale (mm.second, mm.first);
             //update data
-            hgv1->updateData (&S.CC);
-            hgv2->updateData (&S.lapCC);
+            hgv1->updateData (&S.NN);
+            hgv1->clearAutoscaleColour();
+            hgv2->updateData (&S.lapNN);
+            hgv2->clearAutoscaleColour();
+            hgv3->updateData (&S.CC);
+            hgv3->clearAutoscaleColour();
             //hgv1->clearAutoscaleColour();
-            std::cout << std::setprecision(16) << " CC " << S.sum_CC << " lapCC " << S.sum_lapCC << " time step " << i << " plotevery " << plotevery << std::endl;
+            std::cout << std::setprecision(16) << " NN " << S.sum_NN << " lapNN " << S.sum_lapNN << " time step " << i << " plotevery " << plotEvery << std::endl;
             vidframes = true;
-            if (i % plotevery == 0) {
+            if (i % plotEvery == 0) {
                 if (vidframes) {
                     savePngs (logpath, "nn0", framecount, v1);
                     ++framecount;

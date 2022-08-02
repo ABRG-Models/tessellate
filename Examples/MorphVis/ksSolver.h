@@ -85,6 +85,7 @@ public:
     vector<FLT> lapNN;
     vector<FLT> CT;
     vector<FLT> lapCC;
+    vector<FLT> boundaryFade;
 // empty constructor
     ksSolver(){};
 // constructor with HexGrid passed in
@@ -112,12 +113,13 @@ public:
         this->setHexType();
         this->NN.resize(n);
         this->CC.resize(n);
-        this->lapNN.resize(n,0.0);
+        this->boundaryFade.resize(n);
         afile << "after alloc NN and CC" <<endl;
         pair<FLT, FLT> centroid = set_kS_polars(this->seedPoint);
         cout << " end of ksSolver from file " << " x seedPoint " << seedPoint.first << " y seedPoint " << seedPoint.second << endl;
         cout << " end of ksSolver from file " << " centroid x " << centroid.first << " centroid y " << centroid.second << endl;
     }; // end of ksSolver constructor
+
 // constructor with radius passed in for solving on radial boundaries
     ksSolver (int scale, FLT xspan, string logpath, FLT radius, pair<FLT, FLT> seedPoint, FLT lengthScale=1.0) {
         this->scale = scale;
@@ -144,67 +146,10 @@ public:
         afile << " max x " << Hgrid->getXmax(0.0) << " min x " << Hgrid->getXmin(0.0) << endl;
         afile << "after  filling H in circular constructor" << " n = " << n <<endl;
         N.resize(n);
-        /*
-        for (auto &h : this->Hgrid->hexen){
-            this->N[h.vi].resize(6);
-            if (!HAS_nE(h.vi)) {
-                h.setBoundaryHex();
-                this->N[h.vi][0] = h.vi;
-            }
-            else {
-                this->N[h.vi][0] = Hgrid->d_ne[h.vi];
-            }
-
-            if (!HAS_nNE(h.vi)) {
-                h.setBoundaryHex();
-                this->N[h.vi][1] = h.vi;
-            }
-            else {
-                this->N[h.vi][1] = Hgrid->d_nne[h.vi];
-            }
-
-            if (!HAS_nNW(h.vi)) {
-                h.setBoundaryHex();
-                this->N[h.vi][2] = h.vi;
-            }
-            else {
-                this->N[h.vi][2] = Hgrid->d_nnw[h.vi];
-            }
-
-            if (!HAS_nW(h.vi)) {
-                h.setBoundaryHex();
-                this->N[h.vi][3] = h.vi;
-            }
-            else {
-                this->N[h.vi][3] = Hgrid->d_nw[h.vi];
-            }
-
-            if (!HAS_nSW(h.vi)) {
-                h.setBoundaryHex();
-                this->N[h.vi][4] = h.vi;
-            }
-            else {
-                this->N[h.vi][4] = Hgrid->d_nsw[h.vi];
-            }
-
-            if (!HAS_nSE(h.vi)) {
-                h.setBoundaryHex();
-                this->N[h.vi][5] = h.vi;
-            }
-            else {
-                this->N[h.vi][5] = Hgrid->d_nse[h.vi];
-            }
-        } //end of loop over HexGri this->setHexType();
-        */
-        /*
-        Hgrid->computeDistanceToBoundary();
-        for (auto &h : Hgrid->hexen) {
-            afile  << "dist to bdry " << h.distToBoundary << " for " << h.vi << endl;
-        }
-        */
         this->setHexType();
         this->NN.resize(n);
         this->CC.resize(n);
+        this->boundaryFade.resize(n);
         afile << "after alloc NN and CC" <<endl;
         pair<FLT, FLT> centroid = set_kS_polars(this->seedPoint);
         cout << " end of ksSolver circle radius " << " x seedPoint " << seedPoint.first << " y seedPoint " << seedPoint.second << endl;
@@ -241,6 +186,7 @@ public:
         this->setHexType();
         this->NN.resize(n);
         this->CC.resize(n);
+        this->boundaryFade.resize(n);
         afile << "after alloc NN and CC" <<endl;
         pair<FLT, FLT> centroid = set_kS_polars(this->seedPoint);
         cout << " end of ksSolver bezCurvePath " << " x seedPoint " << seedPoint.first << " y seedPoint " << seedPoint.second << endl;
@@ -312,18 +258,19 @@ public:
 // method to calculate the Laplacian
     vector<FLT> getLaplacian(vector<FLT> Q, FLT dx) {
         vector<FLT> L(n,0.);
-        for(auto &h : this->Hgrid->hexen){
-         int i = int(h.vi);
+#pragma omp parallel for schedule(static) shared(L, Q)
+        for  (int i=0 ; i<this->n; i++){
             L[i]=(Q[N[i][0]]+Q[N[i][1]]+Q[N[i][2]]+Q[N[i][3]]+Q[N[i][4]]+Q[N[i][5]]-6.*Q[i])*this->overds/1.5;
         }
         return L;
     }
 
+//chemotaxis term
     vector<FLT> chemoTaxis(vector<FLT> Q, vector<FLT> P, FLT dx) {
         vector<FLT> cT(n,0.);
 
-        for (auto &h : Hgrid->hexen) {
-            unsigned int i = h.vi;
+#pragma omp parallel for schedule(static) shared(Q, P, cT)
+        for (int i=0; i < this->n; i++) {
         // finite volume method Lee et al. https://doi.org/10.1080/00207160.2013.864392
             FLT dr0Q = (Q[N[i][0]]+Q[i])/2.;
             FLT dg0Q = (Q[N[i][1]]+Q[i])/2.;
@@ -626,6 +573,27 @@ public:
           }
           void step(FLT dt, FLT Dn, FLT Dchi, FLT Dc);
     }//end step
+
+    //function called by main to set the fading to the boundary
+    //to be used to set up initial conditions and in setBoundary
+    void setBoundaryFade(FLT exponent) {
+        for (auto h : this->Hgrid->hexen) {
+            if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
+                this->boundaryFade[h.vi] = 1.0 / ( 1.0 + exp (exponent*(h.distToBoundary- boundaryFalloffDist)) );
+            }
+        }
+    }
+
+
+
+// function to reset boundary to zero
+    void setBoundaryZero() {
+        for (auto h : this->Hgrid->hexen) {
+            this->NN[h.vi] = this->NN[h.vi] * this->boundaryFade[h.vi];
+            this->CC[h.vi] = this->CC[h.vi] * this->boundaryFade[h.vi];
+        }
+    }
+
 
     void reverse_y ()
 	{
