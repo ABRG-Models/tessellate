@@ -34,7 +34,9 @@
 #define HEX_GEOM
 #include "hexGeometry.h"
 #endif
+#ifdef BESSEL
 #include <boost/math/special_functions/bessel.hpp>
+#endif
 #define PI 3.1415926535897932
 
 using std::vector;
@@ -147,7 +149,7 @@ public:
   * basepath points to the directory for input/output files
   * npoints is the number of Voronoi seed points
   */
-    DRegion (int scale, FLT xspan, string basepath, int npoints) {
+    DRegion (int scale, FLT xspan, string basepath, int npoints, bool lPolygon=false) {
         this->NUMPOINTS = npoints;
         this->scale = scale;
         this->logpath = basepath;
@@ -155,11 +157,12 @@ public:
         FLT s = pow(2.0, scale-1);
         this->ds = 1.0/s;
         this->hexArea = 3.0*tan30*this->ds*this->ds;
-        ofstream afile (this->logpath + "/debug.out" );
-        ofstream jfile (this->logpath + "/correlateVector.out");
-        ifstream bfile(this->logpath + "/rectCentres.inp");
-        afile << this->logpath << endl;
-        cout << "before creating BezCurve" <<endl;
+        std::system("pwd");
+        ofstream afile (this->logpath + "/debug.out", ios_base:: out );
+        ofstream jfile (this->logpath + "/correlateVector.out", ios_base:: out);
+        ifstream bfile;
+        string cen ;
+        cout << this->logpath << endl;
         srand(time(NULL)); //reseed random number generator
         n = 0;
         Hgrid = new HexGrid(this->ds, this->xspan, 0.0, morph::HexDomainShape::Boundary);
@@ -168,30 +171,56 @@ public:
         FLT maxX = Hgrid->getXmax(0.0);
         afile << " the maximum value of x is is " << maxX << endl;
         hGeo = new hexGeometry();
-        // now read in the boundary either as a header or as a morph  d
-        #include "bezRect.h"
-        rectCorners.resize(4);
-        this->rectCorners[0] = v1;
-        this->rectCorners[1] = v2;
-        this->rectCorners[2] = v3;
-        this->rectCorners[3] = v4;
-        /*
-        morph::ReadCurves r("./rat.svg");
-        Hgrid->setBoundary (r.getCorticalPath(),true);
-        */
-        // this was the original call, I am trying out setBoundaryDregion for debugging
-        Hgrid->setBoundary(bound,true);
-        //Hgrid->setEllipticalBoundary (1.0, 1.0);
+        cout << "before creating BezCurve" <<endl;
+        // now read in the boundary either as a header or as a morph
+        if (lPolygon) {
+            string cen = "./rectCentres.inp";
+            std::cout << "cen " << cen << std::endl;
+            bfile.open(cen, ios_base::in);
+            if (!bfile) {
+                std::cout << "error opening bfile" << std::endl;
+            }
+            pair<float,float> v1 = make_pair (-0.700000, -0.700000);
+            pair<float,float> v2 = make_pair (0.700000, -0.700000);
+            pair<float,float> v3 = make_pair (0.700000, 0.700000);
+            pair<float,float> v4 = make_pair (-0.700000, 0.700000);
+            morph::BezCurve<float> c1(v1,v2);
+            morph::BezCurve<float> c2(v2,v3);
+            morph::BezCurve<float> c3(v3,v4);
+            morph::BezCurve<float> c4(v4,v1);
+            morph::BezCurvePath<float> bound;
+            bound.addCurve(c1);
+            bound.addCurve(c2);
+            bound.addCurve(c3);
+            bound.addCurve(c4);
+            rectCorners.resize(4);
+            this->rectCorners[0] = v1;
+            this->rectCorners[1] = v2;
+            this->rectCorners[2] = v3;
+            this->rectCorners[3] = v4;
+            Hgrid->setBoundary(bound,true);
+        }
+        else {
+            string cen = "./ratCentres.inp";
+            std::cout << "cen " << cen << std::endl;
+            bfile.open(cen, ios_base::in);
+            if (!bfile) {
+                std::cout << "error opening bfile" << std::endl;
+            }
+            morph::ReadCurves r("./rat.svg");
+            Hgrid->setBoundary (r.getCorticalPath(),true);
+        }
         cout << "after setting boundary on  H " << Hgrid->num() << endl;
         n = Hgrid->num();
         cout << "after  boundary set HexGrid has " <<  n << " hexes" << endl;
         // now set the centres either read in or randomly generated
         //    #include "centres.h"
-        centres.resize(NUMPOINTS);
+        std::pair<FLT,FLT> conPair = std::make_pair(1.0,-1.0);
+        centres.resize(NUMPOINTS, conPair);
         centroids.resize(NUMPOINTS);
         for (unsigned int i=0; i<NUMPOINTS; i++) {
             bfile >> centres[i].first >> centres[i].second;
-           cout << "centres.first " << centres[i].first << " centres.second " <<  centres[i].second << endl;
+            cout << "centres.first " << centres[i].first << " centres.second " <<  centres[i].second << endl;
         }
         cout << "after setting centres " << endl;
    //these are the vectors of vectors for the regions
@@ -357,7 +386,6 @@ public:
        for (unsigned int j=0;j<NUMPOINTS;j++){
            for (auto h : Hgrid->hexen) {
                if (region[h.vi][0] == (int) j) {
-                   afile << "hex " << h.vi << " region " << region[h.vi][0] << " j " << j<< endl;
                    this->regionHex[j].push_back(h);
                }
            }
@@ -2924,6 +2952,7 @@ FLT regnnfrac (int regNum) {
         return;
     }
 
+#ifdef BESSEL
     int regionBessel(int regNum, int radialOrder, int angularOrder, FLT phase, FLT Dn=1.0) {
         int numHexes = 0;
         for (auto h : this->regionHex[regNum]) {
@@ -2941,6 +2970,7 @@ FLT regnnfrac (int regNum) {
         }
         return numHexes;
     }
+#endif
 
     void renewCentroids(int regNum) {
     // fill the centroids

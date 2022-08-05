@@ -68,7 +68,6 @@ public:
     FLT ds;
     FLT nnInitialOffset = 1.0;
     FLT ccInitialOffset = 2.5;
-    FLT boundaryFalloffDist = 0.024;
     pair<FLT,FLT> seedPoint;
     BezCurvePath<float> bound;
     string logpath;
@@ -245,12 +244,6 @@ public:
                 this->N[h.vi][5] = Hgrid->d_nse[h.vi];
             }
         } //end of loop over HexGri this->setHexType();
-        /*
-        Hgrid->computeDistanceToBoundary();
-        for (auto &h : Hgrid->hexen) {
-            afile  << "dist to bdry " << h.distToBoundary << " for " << h.vi << endl;
-        }
-        */
     } // end of setHexType
 
 // Constructor with boundary passed in
@@ -278,18 +271,15 @@ public:
             FLT dr1Q = (Q[N[i][3]]+Q[i])/2.;
             FLT dg1Q = (Q[N[i][4]]+Q[i])/2.;
             FLT db1Q = (Q[N[i][5]]+Q[i])/2.;
-	  //FLT ncentre = Q[i];
+            //FLT ncentre = Q[i];
             FLT dr0P = P[N[i][0]]-P[i];
             FLT dg0P = P[N[i][1]]-P[i];
             FLT db0P = P[N[i][2]]-P[i];
             FLT dr1P = P[N[i][3]]-P[i];
             FLT dg1P = P[N[i][4]]-P[i];
             FLT db1P = P[N[i][5]]-P[i];
-
-
-	  //finite volume for NdelC, h = s/2
+            //finite volume for NdelC, h = s/2
             cT[i] = (dr0Q*dr0P+dg0Q*dg0P+db0Q*db0P+dr1Q*dr1P+dg1Q*dg1P+db1Q*db1P)*this->overds/1.5;
-
         } //matches for on i
         return cT;
     } //end of function chemoTaxis
@@ -297,7 +287,7 @@ public:
   // function to compute the derivative
     void compute_dNNdt(vector<FLT>& inN, vector<FLT>& dNdt, FLT Dn, FLT Dchi) {
         //vector<FLT> cTaxis(this->n,0);
-	this->lapNN = getLaplacian(inN,this->ds);
+        this->lapNN = getLaplacian(inN,this->ds);
         this->CT = chemoTaxis(inN,this->CC,this->ds);
         FLT a = 1., b = 1.;
         for (int h=0; h < this->n; h++) {
@@ -322,6 +312,8 @@ public:
     void stepEuler(FLT dt, FLT Dn, FLT Dchi, FLT Dc) {
         // Set up boundary conditions with ghost points
         //cout << " in time step before ghost points" << endl;
+        //I think this is pointless given setting of HGrid->N in setBoundary
+        /*
         for(auto h : Hgrid->hexen){
             if (h.boundaryHex()) {
                 for (int j=0;j<6;j++) {
@@ -333,6 +325,7 @@ public:
                 }
             }
         }
+        */
         // set up sum_ variables
         sum_NN = 0.0f;
         sum_CC = 0.0f;
@@ -379,21 +372,19 @@ public:
         sum_lapCC = 0.0f;
         // Set up boundary conditions with ghost points
         //cout << " in time step before ghost points" << endl;
+        // I think that this is pointless given the setting of Hgrid0>N previously
+        /*
         for(auto &h : Hgrid->hexen)
-	{
-	    //cout << "top of ghost loop hex " << h.vi << " x " << h.x << " y " << h.y << endl;
-            if (h.boundaryHex())
-	    {
-                for (int j=0;j<6;j++)
-                {
-		    int i = int(h.vi);
+            if (h.boundaryHex()) {
+                for (int j=0;j<6;j++) {
+                    int i = int(h.vi);
                     if(N[h.vi][j] == i) {
-       	                this->NN[N[h.vi][j]] = this->NN[h.vi];
-	                this->CC[N[h.vi][j]] = this->CC[h.vi];
-	            }
-	        }
-	    }
-        }
+                        this->NN[N[h.vi][j]] = this->NN[h.vi];
+                        this->CC[N[h.vi][j]] = this->CC[h.vi];
+                    }
+                }
+            }
+        */
         //std::cout << "after ghost hex loop morph 1" << std::endl;
         // 2. Do integration of NN
         {
@@ -411,9 +402,7 @@ public:
             /*
              * Stage 1
              */
-	    //cout << "in ksSolver before compute_dNNdt" << endl;
             this->compute_dNNdt (this->NN, dNdt, Dn, Dchi);
-	    //cout << "in ksSolver after compute_dNNdt" << endl;
             for (int h=0; h< this->n; ++h) {
                 K1[h] = dNdt[h] * dt;
                 Ntst[h] = this->NN[h] + K1[h] * 0.5 ;
@@ -482,7 +471,7 @@ public:
             /*
              * Stage 2
              */
-		    this->compute_dCCdt (Ctst, dCdt, Dc);
+            this->compute_dCCdt (Ctst, dCdt, Dc);
             for (int h=0; h < this->n; ++h) {
                 K2[h] = dCdt[h] * dt;
                 Ctst[h] = this->CC[h] + K2[h] * 0.5;
@@ -530,61 +519,37 @@ public:
     }//end step
 
   //function to timestep coupled equations option to set boundary to constant value
-    void step(FLT dt, FLT Dn, FLT Dchi, FLT Dc, int steps, int numAdjust)
-	{
+    void step(FLT dt, FLT Dn, FLT Dchi, FLT Dc, int steps, int numAdjust) {
         dt = dt * 2.5 / Dn;
-
-
-      if ((steps%numAdjust == 0) && (steps/numAdjust != 0))
-	  {
-	     cout << "in numAdjust if step " << steps << endl;
-	     for (auto &h : this->Hgrid->hexen)
-	     {
-		     //cout << "dist to bdry" << h.distToBoundary << endl;
-	         if (h.distToBoundary > -0.5)
-		     { // It's possible that distToBoundary is set to -1.0
-                FLT bSig = 1.0 / ( 1.0 + exp (-100.0*(h.distToBoundary- this->boundaryFalloffDist)) );
-				//cout << "bSig " << bSig << " for hex " << h.vi << endl;
-                this->NN[h.vi] = (this->NN[h.vi] - this->nnInitialOffset) * bSig + this->nnInitialOffset;
-                this->CC[h.vi] = (this->CC[h.vi] - this->ccInitialOffset) * bSig + this->ccInitialOffset;
-		     } //end of if on boundary distance
-	     }//end of loop over hexGrid
-	  } //end of code applied to keep boundary conditions static
-
+        if ((steps%numAdjust == 0) && (steps/numAdjust != 0)) {
+            cout << "in numAdjust if step " << steps << endl;
+        }
         // Set up boundary conditions with ghost points
         //cout << " in time step before ghost points" << endl;
-        for(auto &h : Hgrid->hexen)
-		{
-	   // cout << "top of ghost loop hex " << h.vi << " x " << h.x << " y " << h.y << endl;
-            if(h.boundaryHex())
-			{
-                for(int j=0;j<6;j++)
-				{
-		            int i = int(h.vi);
-		 // cout << "in ghost loop j = " << j << " i= " << i << " Nbr " << N[h.vi][j] << endl;
-                    if(N[h.vi][j] == i)
-					{
-       	                this->NN[N[h.vi][j]] = NN[h.vi];
-			//   cout << " NN " << NN[N[h.vi][j]] << " NN central " << NN[h.vi] << endl;
-	                    this->CC[N[h.vi][j]] = this->CC[h.vi];
-	                }
-	            }
-	         }
-          }
-          void step(FLT dt, FLT Dn, FLT Dchi, FLT Dc);
+        //I think this is pointless given setting of HGrid->N in setBoundary
+        /*
+        for(auto &h : Hgrid->hexen) {
+            if (h.boundaryHex()) {
+                for(int j=0;j<6;j++) {
+                    int i = int(h.vi);
+                    if(N[h.vi][j] == i) {
+                        this->NN[N[h.vi][j]] = this->NN[h.vi];
+                        this->CC[N[h.vi][j]] = this->CC[h.vi];
+                    }
+                }
+            }
+        }
+        */
+        void step(FLT dt, FLT Dn, FLT Dchi, FLT Dc);
     }//end step
 
     //function called by main to set the fading to the boundary
     //to be used to set up initial conditions and in setBoundary
-    void setBoundaryFade(FLT exponent) {
+    void setBoundaryFade(FLT exponent, FLT boundaryFallOffDist) {
         for (auto h : this->Hgrid->hexen) {
-            if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
-                this->boundaryFade[h.vi] = 1.0 / ( 1.0 + exp (exponent*(h.distToBoundary- boundaryFalloffDist)) );
-            }
+            this->boundaryFade[h.vi] = 1.0 / ( 1.0 + exp (exponent*(h.distToBoundary- boundaryFallOffDist)) );
         }
     }
-
-
 
 // function to reset boundary to zero
     void setBoundaryZero() {
@@ -595,63 +560,53 @@ public:
     }
 
 
-    void reverse_y ()
-	{
-	  for (auto &h : this->Hgrid->hexen)
-	    {
-	      //cout << " in reverse_y " << h.vi << endl;
-	      //int index = h.vi;
-	      //cout << " in y reversing loop " << h.vi << endl;
-	      float temp = h.y;
-	     // cout << " after getting y " << temp << endl;
-		  if (temp != 0.0)
-		  {
-	         // cout << " in y reversing loop " << endl;
-	          h.y = -temp;
-              this->Hgrid->d_y[h.vi] = -temp;
-		  }
-		}
-	}
+    void reverse_y () {
+        for (auto &h : this->Hgrid->hexen) {
+            float temp = h.y;
+            if (temp != 0.0) {
+                h.y = -temp;
+                this->Hgrid->d_y[h.vi] = -temp;
+            }
+        }
+    }
 
 // function to give r and theta relative to region centre
     pair <FLT,FLT> set_kS_polars(pair<FLT,FLT> centre){
         pair <FLT, FLT> result;
-		result.first = 0.0;
-		result.second = 0.0;
+        result.first = 0.0;
+        result.second = 0.0;
         FLT xav=0;
         FLT yav = 0;
         int hexcount = 0;
         FLT maxPhi = -10.0;
         FLT minPhi = 10.0;
-	cout <<"in set polars ksSolver xcentre" << centre.first << " y_centre  " << centre.second <<endl;
+        cout <<"in set polars ksSolver xcentre" << centre.first << " y_centre  " << centre.second <<endl;
         for (auto &h : this->Hgrid->hexen) {
             hexcount++;
             xav += h.x;
             yav += h.y;
         }
-	//cout << "after set centres " << endl;
-	if (hexcount != 0) {
+        if (hexcount != 0) {
             xav = xav / (hexcount*1.0);
             yav = yav / (hexcount*1.0);
-	}
-	else {
-		  //cout << " in set_polars no hexes in region "<<endl;
-		  }
+        }
+        else {
+            std::cout << "Hex count is 0 in ks_Polars" << std::endl;
+        }
 //go over the region and put the hexes into bins then average
         for (auto&  h : this->Hgrid->hexen) {
-			FLT angle = 0;
+            FLT angle = 0;
             FLT dx = h.x;
             FLT dy = h.y;
-            h.r = sqrt((dx - centre.first)*(dx - centre.first)
-			+ (dy - yav)*(dy - yav));
+            h.r = sqrt((dx - centre.first)*(dx - centre.first) + (dy - yav)*(dy - yav));
             if (dy >= centre.second) {
                 angle =   atan2((dy - centre.second), (dx - centre.first));
-			  h.phi = angle;
-	    }
+                h.phi = angle;
+            }
             else {
                 angle =  2*PI + atan2((dy - centre.second), (dx - centre.first));
-			    h.phi = angle;
-	    }
+                h.phi = angle;
+            }
             if (angle < minPhi) {
                 minPhi = angle;
             }
@@ -662,7 +617,7 @@ public:
         cout << " set_kS_polars max phi " << maxPhi << " minPhi " << minPhi << endl;
         result.first = xav - centre.first ; // barycentre
         result.second = yav - centre.second;
-		cout << "centre x "<< centre.first << " centre y " << centre.second << " centreMove.x " << result.first << " centreMove.y " << result.second <<endl;
+        cout << "centre x "<< centre.first << " centre y " << centre.second << " centreMove.x " << result.first << " centreMove.y " << result.second <<endl;
         return result;
     } //end of function set_polars
 

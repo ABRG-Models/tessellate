@@ -158,8 +158,10 @@ int main (int argc, char **argv)
     bool skipMorph  = conf.getBool("skipMorph",false);
     bool Lcontinue = conf.getBool("Lcontinue",false);
     bool lBoundZero = conf.getBool("lBoundZero",false);
+    bool lPolygon = conf.getBool("lPolygon", false);
     unsigned int numpoints = conf.getInt("numpoints",41);
     cout << " Lcontinue " << Lcontinue << " skipMorph " << skipMorph << " lBoundZero " << lBoundZero << std::endl;
+    cout << "logpath " << logpath << std::endl;
     ofstream afile (logpath + "/centroids.out",ios::app);
 #ifdef COMPILE_PLOTTING
     vtxVisual* cv;
@@ -167,12 +169,26 @@ int main (int argc, char **argv)
 
 
     // A ra2yyndo2yym uniform generator returning real/FLTing point types
-    ofstream gfile ( logpath + "/edges.out");
+    ofstream gfile ( logpath +  "/edges.out");
     ofstream jfile ( logpath + "/results.txt",ios::app);
-    ofstream degfile1 (logpath + "/degree1.data", ios::app);
+    ofstream degfile1 (logpath + "degree1.data", ios::app);
     ofstream degfile2 (logpath + "/degree2.data", ios::app);
     ofstream degfile3 (logpath + "/degree3.data", ios::app);
-
+    if (!gfile) {
+        std::cout << "error opening gfile" << std::endl;
+    }
+    if (!jfile) {
+        std::cout << "error opening jfile" << std::endl;
+    }
+    if (!degfile1) {
+        std::cout << "error opening degfile1" << std::endl;
+    }
+    if (!degfile2) {
+        std::cout << "error opening degfile2" << std::endl;
+    }
+    if (!degfile3) {
+        std::cout << "error opening degfile3" << std::endl;
+    }
     //set seed
     std::cout << "LfixedSeed = " << LfixedSeed << std::endl;
     unsigned int seed;
@@ -184,13 +200,15 @@ int main (int argc, char **argv)
 
     morph::RandUniform<FLT> ruf(seed);
 // initialise DRegion class setting scale
-    DRegion M(scale,xspan,logpath,numpoints); //create tessellation
+    DRegion M(scale,xspan,logpath,numpoints,lPolygon); //create tessellation
     M.setCreg(); //set counts to identify inner boundaries
     cout << "after setCreg" << std::endl;
     M.setInternalBoundary(); //set internal boundaries
     cout << "after setInternalBoundary" << std::endl;
     //next line only needed for rectangular type domains
-    M.cornerVertices(); //sets the rectangle corner hexes as vertices
+    if (lPolygon) {
+        M.cornerVertices(); //sets the rectangle corner hexes as vertices
+    }
     cout << "before dissect_boundary " << endl;
     vector<std::pair<FLT,FLT>> cGravity;
     cGravity = M.dissectBoundary(); //dissect region boundary
@@ -370,9 +388,10 @@ int main (int argc, char **argv)
     string fname = logpath + "/first.h5";
     cout << "just before first data read morph 0 "<< " lcontinue " << Lcontinue << " exponent " << exponent << endl;
     // set up the boundaryFade vector and compute distance to boundary
+    // Note the calls must be in this order, boundaryDist set first
     for (unsigned int j=0;j<numpoints;j++) {
-        S[j].setBoundaryFade(exponent);
         S[j].Hgrid->computeDistanceToBoundary();
+        S[j].setBoundaryFade(exponent, boundaryFalloffDist);
     }
 // initialise with random field
     if (Lcontinue) {
@@ -399,39 +418,31 @@ int main (int argc, char **argv)
             // normal value. Close to boundary, noise is less.
                 FLT choice = ruf.get();
                 if (choice > 0.5) {
-                    S[j].NN[h.vi] = - ruf.get() * aNoiseGain   + nnInitialOffset;
-                    S[j].CC[h.vi] = - ruf.get() * aNoiseGain *  + ccInitialOffset;
+                    //S[j].NN[h.vi] = - ruf.get() * aNoiseGain   + nnInitialOffset;
+                    //S[j].CC[h.vi] = - ruf.get() * aNoiseGain *  + ccInitialOffset;
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r) ;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r);
-                    //S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
-                    //S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
+                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
+                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
                 }
                 else {
-                    S[j].NN[h.vi] = ruf.get() * aNoiseGain  + nnInitialOffset;
-                    S[j].CC[h.vi] = ruf.get() * aNoiseGain  + ccInitialOffset;
+                    //S[j].NN[h.vi] = ruf.get() * aNoiseGain  + nnInitialOffset;
+                    //S[j].CC[h.vi] = ruf.get() * aNoiseGain  + ccInitialOffset;
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r) ;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r);
-                    //S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
-                    //S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
-                }
-                if (h.boundaryHex()) {
-                    FLT bSig = S[j].boundaryFade[h.vi];
-                    S[j].NN[h.vi] = nnInitialOffset;
-                    S[j].CC[h.vi] = ccInitialOffset;
-                    cout << "h.vi " << h.vi << " dist to boundary " << h.distToBoundary << " bSig " << bSig << std::endl;
+                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
+                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
+                    cout << "NN " << S[j].NN[h.vi] << " dist2vd " << h.distToBoundary << std::endl;
                 }
                 if (lBoundZero) {
                     if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
                         S[j].NN[h.vi] = S[j].NN[h.vi] * S[j].boundaryFade[h.vi];
                         S[j].CC[h.vi] = S[j].CC[h.vi] * S[j].boundaryFade[h.vi];
+                        //S[j].NN[h.vi] = (S[j].NN[h.vi] - nnInitialOffset) * S[j].boundaryFade[h.vi] + nnInitialOffset;
+                        //S[j].CC[h.vi] = (S[j].CC[h.vi] - ccInitialOffset) * S[j].boundaryFade[h.vi] + ccInitialOffset;
+                        cout << "boundaryFade " << S[j].boundaryFade[h.vi] << " dist2vd " << h.distToBoundary << std::endl;
                     }//end of if on boundaryDist
-                }
-                else {
-                    if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
-                        S[j].NN[h.vi] = (S[j].NN[h.vi] - nnInitialOffset) * S[j].boundaryFade[h.vi] + nnInitialOffset;
-                        S[j].CC[h.vi] = (S[j].CC[h.vi] - ccInitialOffset) * S[j].boundaryFade[h.vi] + ccInitialOffset;
-                    } //end of in on boundary distance
-                } //end of if on else lBoundZero
+                }//end of if on lBoundZero
             } //end of loop over single region
         }//end of loop over regions
     } //end of else on Lcontinue
@@ -530,7 +541,7 @@ int main (int argc, char **argv)
             */
         } //end of loop over regions
         if (i%checkEvery == 0) {
-            cerr << "NNdiffSum " << NNdiffSum << " i = " << i << endl;
+            cout << "NNdiffSum " << NNdiffSum << " i = " << i << endl;
             if (NNdiffSum/(numpoints*1.0) < diffTol) {
                 cout << "morphed converged step " << i << " field diff " << NNdiffSum/(1.0*numpoints) << " diffTol " << diffTol << std::endl;
                 break;
@@ -554,7 +565,7 @@ int main (int argc, char **argv)
                     avm1->clearAutoscaleColour();
                     v1->render();
                     if (i%plotEvery == 0) {
-                        std::cerr << std::setprecision(16) << " NN " << S[j].sum_NN << " lapNN " << S[j].sum_lapNN << " step " << i << " plotEvery " << plotEvery << std::endl;
+                        std::cout << std::setprecision(16) << " NN " << S[j].sum_NN << " lapNN " << S[j].sum_lapNN << " step " << i << " plotEvery " << plotEvery << std::endl;
                     }
 #ifdef RANDOM
                 }//end of if on inner regions
@@ -739,9 +750,10 @@ int main (int argc, char **argv)
 // initialise the fields
     string gname = logpath + "/second.h5";
     cout<< "just before second data read"<< " lcontinue " << Lcontinue <<endl;
+    // Note the calls must be in this order, boundaryDist set first
     for (unsigned int j=0;j<numpoints;j++) {
-        S[j].setBoundaryFade(exponent);
         S[j].Hgrid->computeDistanceToBoundary();
+        S[j].setBoundaryFade(exponent, boundaryFalloffDist);
     }
 // initialise with random field
     if (Lcontinue) {
@@ -768,39 +780,29 @@ int main (int argc, char **argv)
             // normal value. Close to boundary, noise is less.
                 FLT choice = ruf.get();
                 if (choice > 0.5) {
-                    S[j].NN[h.vi] = - ruf.get() * aNoiseGain   + nnInitialOffset;
-                    S[j].CC[h.vi] = - ruf.get() * aNoiseGain *  + ccInitialOffset;
+                    //S[j].NN[h.vi] = - ruf.get() * aNoiseGain   + nnInitialOffset;
+                    //S[j].CC[h.vi] = - ruf.get() * aNoiseGain *  + ccInitialOffset;
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r) ;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r);
-                    //S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
-                    //S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
+                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
+                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
                 }
                 else {
-                    S[j].NN[h.vi] = ruf.get() * aNoiseGain  + nnInitialOffset;
-                    S[j].CC[h.vi] = ruf.get() * aNoiseGain  + ccInitialOffset;
+                    //S[j].NN[h.vi] = ruf.get() * aNoiseGain  + nnInitialOffset;
+                    //S[j].CC[h.vi] = ruf.get() * aNoiseGain  + ccInitialOffset;
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r) ;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r);
-                    //S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
-                    //S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
-                }
-                if (h.boundaryHex()) {
-                    FLT bSig = S[j].boundaryFade[h.vi];
-                    S[j].NN[h.vi] = nnInitialOffset;
-                    S[j].CC[h.vi] = ccInitialOffset;
-                    cout << "h.vi " << h.vi << " dist to boundary " << h.distToBoundary << " bSig " << bSig << std::endl;
+                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
+                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
                 }
                 if (lBoundZero) {
                     if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
                         S[j].NN[h.vi] = S[j].NN[h.vi] * S[j].boundaryFade[h.vi];
                         S[j].CC[h.vi] = S[j].CC[h.vi] * S[j].boundaryFade[h.vi];
+                        //S[j].NN[h.vi] = (S[j].NN[h.vi] - nnInitialOffset) * S[j].boundaryFade[h.vi] + nnInitialOffset;
+                        //S[j].CC[h.vi] = (S[j].CC[h.vi] - ccInitialOffset) * S[j].boundaryFade[h.vi] + ccInitialOffset;
                     }//end of if on boundaryDist
-                }
-                else {
-                    if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
-                        S[j].NN[h.vi] = (S[j].NN[h.vi] - nnInitialOffset) * S[j].boundaryFade[h.vi] + nnInitialOffset;
-                        S[j].CC[h.vi] = (S[j].CC[h.vi] - ccInitialOffset) * S[j].boundaryFade[h.vi] + ccInitialOffset;
-                    } //end of in on boundary distance
-                } //end of if on else lBoundZero
+                }//end of if on lBoundDist
             } //end of loop over single region
         }//end of loop over regions
     } //end of else on Lcontinu
@@ -940,7 +942,7 @@ int main (int argc, char **argv)
             */
         }
         if (i%checkEvery == 0) {
-            cerr << "NNdiffSum " << NNdiffSum << " i = " << i << endl;
+            cout << "NNdiffSum " << NNdiffSum << " i = " << i << endl;
             if (NNdiffSum/(numpoints*1.0) < diffTol) {
                 cout << "morphed converged step " << i << " field diff " << NNdiffSum/(1.0*numpoints) << " diffTol " << diffTol << std::endl;
                 break;
@@ -1134,9 +1136,10 @@ int main (int argc, char **argv)
 // now draw the intial tesselation
 // initialise the fields
         cout<< "just before third data read"<< " lcontinue " << Lcontinue <<endl;
+    // Note the calls must be in this order, boundaryDist set first
     for (unsigned int j=0;j<numpoints;j++) {
-        S[j].setBoundaryFade(exponent);
         S[j].Hgrid->computeDistanceToBoundary();
+        S[j].setBoundaryFade(exponent, boundaryFalloffDist);
     }
 // initialise with random field
     string hname = logpath + "/third.h5";
@@ -1164,38 +1167,28 @@ int main (int argc, char **argv)
             // normal value. Close to boundary, noise is less.
                 FLT choice = ruf.get();
                 if (choice > 0.5) {
-                    S[j].NN[h.vi] = - ruf.get() * aNoiseGain   + nnInitialOffset;
-                    S[j].CC[h.vi] = - ruf.get() * aNoiseGain *  + ccInitialOffset;
+                    //S[j].NN[h.vi] = - ruf.get() * aNoiseGain   + nnInitialOffset;
+                    //S[j].CC[h.vi] = - ruf.get() * aNoiseGain *  + ccInitialOffset;
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r) ;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r);
-                    //S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
-                    //S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
+                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
+                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
                 }
                 else {
-                    S[j].NN[h.vi] = ruf.get() * aNoiseGain  + nnInitialOffset;
-                    S[j].CC[h.vi] = ruf.get() * aNoiseGain  + ccInitialOffset;
+                    //S[j].NN[h.vi] = ruf.get() * aNoiseGain  + nnInitialOffset;
+                    //S[j].CC[h.vi] = ruf.get() * aNoiseGain  + ccInitialOffset;
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r) ;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r);
-                    //S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
-                    //S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
-                }
-                if (h.boundaryHex()) {
-                    FLT bSig = S[j].boundaryFade[h.vi];
-                    S[j].NN[h.vi] = nnInitialOffset;
-                    S[j].CC[h.vi] = ccInitialOffset;
-                    cout << "h.vi " << h.vi << " dist to boundary " << h.distToBoundary << " bSig " << bSig << std::endl;
+                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
+                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
                 }
                 if (lBoundZero) {
                     if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
                         S[j].NN[h.vi] = S[j].NN[h.vi] * S[j].boundaryFade[h.vi];
                         S[j].CC[h.vi] = S[j].CC[h.vi] * S[j].boundaryFade[h.vi];
+                        //S[j].NN[h.vi] = (S[j].NN[h.vi] - nnInitialOffset) * S[j].boundaryFade[h.vi] + nnInitialOffset;
+                        //S[j].CC[h.vi] = (S[j].CC[h.vi] - ccInitialOffset) * S[j].boundaryFade[h.vi] + ccInitialOffset;
                     }//end of if on boundaryDist
-                }
-                else {
-                    if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
-                        S[j].NN[h.vi] = (S[j].NN[h.vi] - nnInitialOffset) * S[j].boundaryFade[h.vi] + nnInitialOffset;
-                        S[j].CC[h.vi] = (S[j].CC[h.vi] - ccInitialOffset) * S[j].boundaryFade[h.vi] + ccInitialOffset;
-                    } //end of in on boundary distance
                 } //end of if on else lBoundZero
             } //end of loop over single region
         }//end of loop over regions
@@ -1327,7 +1320,7 @@ int main (int argc, char **argv)
         */
         }
     if (i%checkEvery == 0) {
-        cerr << "NNdiffSum " << NNdiffSum << " i = " << i << endl;
+        cout << "NNdiffSum " << NNdiffSum << " i = " << i << endl;
         if (NNdiffSum/(numpoints*1.0) < diffTol) {
             cout << "morphed converged step " << i << " field diff " << NNdiffSum/(1.0*numpoints) << " diffTol " << diffTol << std::endl;
             break;
