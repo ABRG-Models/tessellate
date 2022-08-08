@@ -2633,7 +2633,7 @@ FLT regnnfrac (int regNum) {
      * and the use from main programs that use ksSolver for each region
      */
     vector <FLT> sectorize_reg_radius (int regNum, int _numSectors, int beginAngle, int endAngle, vector<FLT> fieldVal) {
-        ofstream dfile ("logs/sectorRadius.txt",ios::app);
+        ofstream dfile (logpath + "/sectorRadius.txt",ios::app);
         int numSectors = _numSectors/2;
         vector <FLT>  radiusNN;
         vector <FLT> normalNN;
@@ -2691,7 +2691,7 @@ FLT regnnfrac (int regNum) {
      * and the use from main programs that use ksSolver for each region
      */
     vector <int> sectorize_reg_Dradius (int regNum, int _numSectors, int beginAngle, int endAngle, vector<FLT> fieldVal) {
-       ofstream dfile ( "logs/sectorRadius.txt",ios::app);
+       ofstream dfile ( logpath + "/sectorRadius.txt",ios::app);
        int numSectors = _numSectors/2;
        vector <int>  radiusNN;
        radiusNN.resize(numSectors,0);
@@ -2766,7 +2766,7 @@ FLT regnnfrac (int regNum) {
      */
     vector <FLT> sectorize_reg_angle (int regNum, int numSectors, int beginradius, int endradius, vector<FLT> fieldVal) {
     //std::pair<FLT,FLT> diff; //difference between seed point and CoG of region
-        ofstream cfile ("logs/sectorAngle.txt",ios::app);
+        ofstream cfile (logpath + "/sectorAngle.txt",ios::app);
         vector <FLT> angleNN; //average value of cc in each sector
         vector <FLT> normalNN;
         vector <int> angleCount; //number of hexes in each sector
@@ -2839,7 +2839,7 @@ FLT regnnfrac (int regNum) {
      * and the use from main programs that use ksSolver for each region
      */
     vector <int> sectorize_reg_Dangle (int regNum, int numSectors, int beginradius, int endradius, vector<FLT> fieldVal) {
-        ofstream cfile ("logs/sectorAngle.txt",ios::app);
+        ofstream cfile (logpath + "/sectorAngle.txt",ios::app);
  //std::pair<FLT,FLT> diff; //difference between seed point and CoG of region
         vector <int> angleNN; //digitized value of NN in each sector
         vector <FLT> angleHold;

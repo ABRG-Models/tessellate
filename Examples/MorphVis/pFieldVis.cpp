@@ -128,7 +128,8 @@ int main (int argc, char **argv)
         float ccInitialOffset = conf.getFloat("ccInitialOffset",2.5);
         float diffTol = conf.getFloat("diffTol",1e-8);
         float lengthScale = conf.getFloat("lengthScale",29.0f);
-        float exponent = conf.getFloat("exponent",-100.0);
+        float exponent = conf.getFloat("exponent", -100.0f);
+        float radMix = conf.getFloat("radMix", 1.0f);
 #else
         double dt = conf.getDouble("dt",0.0001);
         double Dn = conf.getDouble("Dn",1.0);
@@ -141,7 +142,8 @@ int main (int argc, char **argv)
         double ccInitialOffset = conf.getDouble("ccInitialOffset",2.5);
         double diffTol = conf.getDouble("diffTol",1e-8);
         double lengthScale = conf.getDouble("lengthScale",29.0);
-        double exponent = conf.getDouble("exponent",-100.0);
+        double exponent = conf.getDouble("exponent", -100.0);
+        double radMix = conf.getDouble("radMix", 1.0);
 #endif
     int numSectors = conf.getInt("numsectors",12);
     int scale = conf.getInt("scale",8);
@@ -171,7 +173,7 @@ int main (int argc, char **argv)
     // A ra2yyndo2yym uniform generator returning real/FLTing point types
     ofstream gfile ( logpath +  "/edges.out");
     ofstream jfile ( logpath + "/results.txt",ios::app);
-    ofstream degfile1 (logpath + "degree1.data", ios::app);
+    ofstream degfile1 (logpath + "/degree1.data", ios::app);
     ofstream degfile2 (logpath + "/degree2.data", ios::app);
     ofstream degfile3 (logpath + "/degree3.data", ios::app);
     if (!gfile) {
@@ -422,16 +424,16 @@ int main (int argc, char **argv)
                     //S[j].CC[h.vi] = - ruf.get() * aNoiseGain *  + ccInitialOffset;
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r) ;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r);
-                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
-                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
+                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix - ruf.get());
+                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
                 }
                 else {
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain  + nnInitialOffset;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain  + ccInitialOffset;
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r) ;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r);
-                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
-                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
+                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
+                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
                     cout << "NN " << S[j].NN[h.vi] << " dist2vd " << h.distToBoundary << std::endl;
                 }
                 if (lBoundZero) {
@@ -784,16 +786,16 @@ int main (int argc, char **argv)
                     //S[j].CC[h.vi] = - ruf.get() * aNoiseGain *  + ccInitialOffset;
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r) ;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r);
-                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
-                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
+                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix - ruf.get());
+                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix - ruf.get());
                 }
                 else {
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain  + nnInitialOffset;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain  + ccInitialOffset;
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r) ;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r);
-                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
-                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
+                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
+                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
                 }
                 if (lBoundZero) {
                     if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
@@ -1171,16 +1173,16 @@ int main (int argc, char **argv)
                     //S[j].CC[h.vi] = - ruf.get() * aNoiseGain *  + ccInitialOffset;
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r) ;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r);
-                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
-                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) - ruf.get());
+                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix - ruf.get());
+                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix - ruf.get());
                 }
                 else {
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain  + nnInitialOffset;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain  + ccInitialOffset;
                     //S[j].NN[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r) ;
                     //S[j].CC[h.vi] = ruf.get() * aNoiseGain * exp(-100.0 * h.r*h.r);
-                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
-                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r) + ruf.get());
+                    S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
+                    S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
                 }
                 if (lBoundZero) {
                     if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
