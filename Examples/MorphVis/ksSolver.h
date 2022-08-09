@@ -251,7 +251,9 @@ public:
 // method to calculate the Laplacian
     vector<FLT> getLaplacian(vector<FLT> Q, FLT dx) {
         vector<FLT> L(n,0.);
+#ifdef OPENMP
 #pragma omp parallel for schedule(static) shared(L, Q)
+#endif
         for  (int i=0 ; i<this->n; i++){
             L[i]=(Q[N[i][0]]+Q[N[i][1]]+Q[N[i][2]]+Q[N[i][3]]+Q[N[i][4]]+Q[N[i][5]]-6.*Q[i])*this->overds/1.5;
         }
@@ -261,8 +263,9 @@ public:
 //chemotaxis term
     vector<FLT> chemoTaxis(vector<FLT> Q, vector<FLT> P, FLT dx) {
         vector<FLT> cT(n,0.);
-
-#pragma omp parallel for schedule(static) shared(Q, P, cT)
+#ifdef OPENMP
+    #pragma omp parallel for schedule(static) shared(Q, P, cT)
+#endif
         for (int i=0; i < this->n; i++) {
         // finite volume method Lee et al. https://doi.org/10.1080/00207160.2013.864392
             FLT dr0Q = (Q[N[i][0]]+Q[i])/2.;
