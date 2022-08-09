@@ -110,7 +110,7 @@ int main (int argc, char **argv)
       return -1;
     }
     string jsonfile = argv[1];
-//    string logpath = argv[2];
+    string logpath = argv[2];
     //  open the confgig file and read in the parameters
     morph::Config conf(jsonfile);
     if (!conf.ready) {
@@ -152,7 +152,6 @@ int main (int argc, char **argv)
     int plotEvery = conf.getInt("plotEvery",1000);
     int checkEvery = conf.getInt("checkEvery",1000);
     int fov = conf.getInt("fov",50);
-    string logpath = conf.getString("logpath", "./logsMorph") ;
     string iter = conf.getString("iter","0");
     bool LfixedSeed = conf.getBool("LfixedSeed",0);
     bool LDn = conf.getBool("LDn",false);
@@ -160,7 +159,7 @@ int main (int argc, char **argv)
     bool skipMorph  = conf.getBool("skipMorph",false);
     bool Lcontinue = conf.getBool("Lcontinue",false);
     bool lBoundZero = conf.getBool("lBoundZero",false);
-    bool lPolygon = conf.getBool("lPolygon", false);
+    int  iPolygon = conf.getInt("iPolygon", 2);
     unsigned int numpoints = conf.getInt("numpoints",41);
     cout << " Lcontinue " << Lcontinue << " skipMorph " << skipMorph << " lBoundZero " << lBoundZero << std::endl;
     cout << "logpath " << logpath << std::endl;
@@ -202,13 +201,13 @@ int main (int argc, char **argv)
 
     morph::RandUniform<FLT> ruf(seed);
 // initialise DRegion class setting scale
-    DRegion M(scale,xspan,logpath,numpoints,lPolygon); //create tessellation
+    DRegion M(scale,xspan,logpath,numpoints,iPolygon); //create tessellation
     M.setCreg(); //set counts to identify inner boundaries
     cout << "after setCreg" << std::endl;
     M.setInternalBoundary(); //set internal boundaries
     cout << "after setInternalBoundary" << std::endl;
     //next line only needed for rectangular type domains
-    if (lPolygon) {
+    if (iPolygon == 1) {
         M.cornerVertices(); //sets the rectangle corner hexes as vertices
     }
     cout << "before dissect_boundary " << endl;

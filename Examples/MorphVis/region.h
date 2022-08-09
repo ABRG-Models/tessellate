@@ -149,7 +149,7 @@ public:
   * basepath points to the directory for input/output files
   * npoints is the number of Voronoi seed points
   */
-    DRegion (int scale, FLT xspan, string basepath, int npoints, bool lPolygon=false) {
+    DRegion (int scale, FLT xspan, string basepath, int npoints, int iPolygon=2) {
         this->NUMPOINTS = npoints;
         this->scale = scale;
         this->logpath = basepath;
@@ -173,7 +173,7 @@ public:
         hGeo = new hexGeometry();
         cout << "before creating BezCurve" <<endl;
         // now read in the boundary either as a header or as a morph
-        if (lPolygon) {
+        if (iPolygon == 0) {
             string cen = "./rectCentres.inp";
             std::cout << "cen " << cen << std::endl;
             bfile.open(cen, ios_base::in);
@@ -200,7 +200,7 @@ public:
             this->rectCorners[3] = v4;
             Hgrid->setBoundary(bound,true);
         }
-        else {
+        else if (iPolygon == 1) {
             string cen = "./ratCentres.inp";
             std::cout << "cen " << cen << std::endl;
             bfile.open(cen, ios_base::in);
@@ -209,6 +209,15 @@ public:
             }
             morph::ReadCurves r("./rat.svg");
             Hgrid->setBoundary (r.getCorticalPath(),true);
+        }
+        else {
+            string cen = "./centres.inp";
+            std::cout << "cen " << cen << std::endl;
+            bfile.open(cen, ios_base::in);
+            if (!bfile) {
+                std::cout << "error opening bfile" << std::endl;
+            }
+            Hgrid->setEllipticalBoundary(1.0, 1.0);
         }
         cout << "after setting boundary on  H " << Hgrid->num() << endl;
         n = Hgrid->num();
