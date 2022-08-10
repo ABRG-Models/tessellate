@@ -112,6 +112,7 @@ int main (int argc, char **argv)
       return -1;
     }
     string jsonfile = argv[1];
+    string logpath = argv[2];
     //  open the confgig file and read in the parameters
     morph::Config conf(jsonfile);
     if (!conf.ready) {
@@ -127,6 +128,8 @@ int main (int argc, char **argv)
         float aNoiseGain = conf.getFloat("aNoiseGain",0.1);
         float nnInitialOffset = conf.getFloat("nnInitialOffset", 0.0);
         float ccInitialOffset = conf.getFloat("ccInitialOffset",2.5);
+        float exponent = conf.getFloat("exponent", -100.0f);
+        float radMix = conf.getFloat("radMix", 1.0f);
         float lengthScale = conf.getFloat("lengthScale",29.0);
 #else
         double dt = conf.getDouble("dt",0.0001);
@@ -139,12 +142,13 @@ int main (int argc, char **argv)
         double nnInitialOffset = conf.getDouble("nnInitialOffset", 0.0);
         double ccInitialOffset = conf.getDouble("ccInitialOffset",2.5);
         double lengthScale = ("lengthScale", 29.0);
+        double exponent = conf.getDouble("exponent", -100.0);
+        double radMix = conf.getDouble("radMix", 1.0);
 #endif
     int numSectors = conf.getInt("numsectors",12);
     int scale = conf.getInt("scale",8);
     int numsteps = conf.getInt("numsteps",100);
     int numprint = conf.getInt("numprint",100);
-    string logpath = conf.getString("logpath", "./logsMorph") ;
     string iter = conf.getString("iter","0");
     bool LfixedSeed = conf.getBool("LfixedSeed",0);
     bool LDn = conf.getBool("LDn",0);
@@ -191,12 +195,12 @@ int main (int argc, char **argv)
  * Initialise ksSolver
  */
 
-    morph::ReadCurves r("./whiskerbarrels.svg");
-    BezCurvePath<FLT> bound = r.getCorticalPath();
+//    morph::ReadCurves r("./whiskerbarrels.svg");
+//    BezCurvePath<FLT> bound = r.getCorticalPath();
     std::pair<FLT,FLT> centroid = std::make_pair(0.0,0.0);
     FLT radius = 1.0;
-    S = ksSolver(scale, xspan, logpath, bound, centroid, lengthScale);
-    //S = ksSolver(scale, xspan, logpath, radius, centroid, lengthScale);
+  //  S = ksSolver(scale, xspan, logpath, bound, centroid, lengthScale);
+      S = ksSolver(scale, xspan, logpath, radius, centroid, lengthScale);
 
 // initialise the fields
     string fname = logpath + "/first.h5";
@@ -219,13 +223,13 @@ int main (int argc, char **argv)
 	    FLT choice = ruf.get();
 	    if (choice > 0.5)
 	    {
-                S.NN[h.vi] = - ruf.get() * aNoiseGain +nnInitialOffset;
+                S.NN[h.vi] = - ruf.get() * aNoiseGain + nnInitialOffset;
                 S.CC[h.vi] = - ruf.get() * aNoiseGain + ccInitialOffset;
 	    }
 	    else
 	    {
-                S.NN[h.vi] = ruf.get() * aNoiseGain +nnInitialOffset;
-                S.CC[h.vi] = ruf.get() * aNoiseGain + ccInitialOffset;
+                S.NN[h.vi] = ruf.get() * aNoiseGain  - nnInitialOffset;
+                S.CC[h.vi] = ruf.get() * aNoiseGain  - ccInitialOffset;
 	    } //end of if on +-
             FLT bSig = 1.0 / ( 1.0 + exp (-10000.0*(h.distToBoundary- boundaryFalloffDist)) );
             if (h.boundaryHex()) {
@@ -238,12 +242,14 @@ int main (int argc, char **argv)
                     S.CC[h.vi] = S.CC[h.vi] * bSig;
                 }
             }
+            /*
             else {
                 if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
                     S.NN[h.vi] = (S.NN[h.vi] - nnInitialOffset) * bSig + nnInitialOffset;
                     S.CC[h.vi] = (S.CC[h.vi] - ccInitialOffset) * bSig + ccInitialOffset;
                 } //end of if on boundary distance
             } //end of if on lBoundZero
+        */
         }//end of loop over HexGrid
     } //end of else on Lcontinue
      cout <<  "just after field creation first morph" << endl;
@@ -372,12 +378,17 @@ int main (int argc, char **argv)
         if ((i % numprint) == 0) {
             //scale NN
             mm = morph::MathAlgo::maxmin (S.NN);
-            std::cout << "NN range: " << std::abs(mm.second - mm.first) << std::endl;
+            std::cout << "NN max: " << mm.first << " NN min " << mm.second << std::endl;
             hgv1->colourScale.compute_autoscale (mm.second, mm.first);
             //scale lapNN
             mm = morph::MathAlgo::maxmin (S.lapNN);
-            std::cout << "lapNN min: " << mm.first << " lapNN max " << mm.second << std::endl;
+            std::cout << "lapNN max: " << mm.first << " lapNN min " << mm.second << std::endl;
             hgv2->colourScale.compute_autoscale (mm.second, mm.first);
+            //scale lapNN
+            mm = morph::MathAlgo::maxmin (S.CC);
+            std::cout << "CC max: " << mm.first << " CC min " << mm.second << std::endl;
+            hgv3->colourScale.compute_autoscale (mm.second, mm.first);
+            //update data
             //update data
             hgv1->updateData (&S.NN);
             hgv1->clearAutoscaleColour();
@@ -386,7 +397,7 @@ int main (int argc, char **argv)
             hgv3->updateData (&S.CC);
             hgv3->clearAutoscaleColour();
             //hgv1->clearAutoscaleColour();
-            std::cout << std::setprecision(16) << " NN " << S.sum_NN << " lapNN " << S.sum_lapNN << " time step " << i << " plotevery " << plotEvery << std::endl;
+            std::cout << std::setprecision(16) << " NNAverage " << S.sum_NN << " lapNNAverage " << S.sum_lapNN << " time step " << i << " plotevery " << plotEvery << std::endl;
             vidframes = true;
             if (i % plotEvery == 0) {
                 if (vidframes) {

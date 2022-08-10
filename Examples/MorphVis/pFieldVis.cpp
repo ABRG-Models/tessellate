@@ -207,7 +207,7 @@ int main (int argc, char **argv)
     M.setInternalBoundary(); //set internal boundaries
     cout << "after setInternalBoundary" << std::endl;
     //next line only needed for rectangular type domains
-    if (iPolygon == 1) {
+    if (iPolygon == 0) {
         M.cornerVertices(); //sets the rectangle corner hexes as vertices
     }
     cout << "before dissect_boundary " << endl;
