@@ -19,8 +19,6 @@
 #include <cctype>
 // #include <boost/math/special_functions/bessel.hpp>
 #define PI 3.1415926535897932
-#define NUMPOINTS 10 //just the A-E rows.
-//#define NUMPOINTS 79 //just the A-E rows.
 
 using std::vector;
 using std::array;
@@ -56,12 +54,13 @@ mix (unsigned int a, unsigned int b, unsigned int c)
 
 int main (int argc, char **argv)
 {
+    int NUMPOINTS = stoi(argv[2]);
     vector <pair <float, float>> centres; //seed points for regions
     centres.resize(NUMPOINTS);
     std::string num;
     unsigned int off;
-    if (argc > 2) {
-    	off = atoi(argv[2]);
+    if (argc > 3) {
+    	off = atoi(argv[3]);
     }
     else {
         num = "";

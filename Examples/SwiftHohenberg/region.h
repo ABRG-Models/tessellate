@@ -2404,6 +2404,7 @@ FLT regnnfrac (int regNum) {
         else {
             vtxCoords = this->mCoords[regNum];
         }
+    }
 
         //iterate over polygon vertices
         cout << " vtxCoords region " << regNum << " vtxCoords size " << vtxCoords.size() << " mCoords size " << this->mCoords[regNum].size() << " vCoords size " << this->vCoords[regNum].size() << endl;
@@ -2970,7 +2971,7 @@ FLT regnnfrac (int regNum) {
             //cout << "region " << regNum <<" theta boundary " << angle << " boundary index " << h.vi << endl;
         }
         irB = sort_indexes(rB); //indices after sort on theta
-        //hhfile << " renewDissect " << " irB size " << irB.size()  << " rB size " << rB.size() << " bsize " << bsize << endl;
+        hhfile << " renewDissect " << " irB size " << irB.size()  << " rB size " << rB.size() << " bsize " << bsize << endl;
         for (int i=0; i< bsize; i++) {
             this->sortedBoundary[regNum].push_back(regionBoundary[irB[i]]);
         }
@@ -2985,7 +2986,7 @@ FLT regnnfrac (int regNum) {
         //write the indices in phi order
        for (int i = 0; i < bsize; i++)
        {
-           //hhfile << " boundHex " << i << " hex " << regionBoundary[irB[i]] << " angle " << rB[irB[i]] << endl;
+           hhfile << " boundHex " << i << " hex " << regionBoundary[irB[i]] << " angle " << rB[irB[i]] << endl;
        }
         int offset = 0;
         int idissect = 0;
@@ -2994,25 +2995,25 @@ FLT regnnfrac (int regNum) {
         // find the offset to the first vertex
         while ((rB[irB[offset]] < vertexAngle[0]) && (offset<bsize)) //while the angle is less than the first vertex
         {
-            //hhfile << " offset inside " << offset << " vertexAngle " << vertexAngle[0] << " hex angle " << rB[irB[offset]]<< " hex " << irB[offset] << endl;
+            hhfile << " offset inside " << offset << " vertexAngle " << vertexAngle[0] << " hex angle " << rB[irB[offset]]<< " hex " << irB[offset] << endl;
             offset++;
         }
-        //hhfile << " offset outside " << offset << " hex angle " << rB[irB[offset]] << " vsize " << vsize << " hex " << irB[offset] << endl;
+        hhfile << " offset outside " << offset << " hex angle " << rB[irB[offset]] << " vsize " << vsize << " hex " << irB[offset] << endl;
         idissect = offset;
         for (int i=1; i< vsize; i++)
         {
-            //hhfile << "head of segment loop " << i << " idissect  " << idissect << " vertexAngle " << vertexAngle[i%vsize] << " hex " << regionBoundary[irB[idissect%bsize]] << endl;
+            hhfile << "head of segment loop " << i << " idissect  " << idissect << " vertexAngle " << vertexAngle[i%vsize] << " hex " << regionBoundary[irB[idissect%bsize]] << endl;
             while ((rB[irB[idissect%bsize]] < vertexAngle[i%vsize]) && (idissect <= bsize))
             {
-          //      hhfile << " filling edge loop " << i-1 << " index " << idissect << " angle " << rB[irB[idissect%bsize]] << " hex " << regionBoundary[irB[idissect%bsize]] << endl;
+                hhfile << " filling edge loop " << i-1 << " index " << idissect << " angle " << rB[irB[idissect%bsize]] << " hex " << regionBoundary[irB[idissect%bsize]] << endl;
                 ihE[i-1].push_back(regionBoundary[irB[idissect%bsize]]);
                 idissect++;
             }
         }
-        //hhfile << " just before  vsize end loop angle " << vertexAngle[0] + 2*PI << endl;
+        hhfile << " just before  vsize end loop angle " << vertexAngle[0] + 2*PI << endl;
         while ((rB[irB[idissect%bsize]] < vertexAngle[0] + 2*PI) && (idissect< bsize+offset-1))
         {
-          //  hhfile << " filling end edge loop 2 " << idissect << " angle " << rB[irB[idissect%bsize]] << " hex " << regionBoundary[irB[idissect%bsize]] <<  endl;
+            hhfile << " filling end edge loop 2 " << idissect << " angle " << rB[irB[idissect%bsize]] << " hex " << regionBoundary[irB[idissect%bsize]] <<  endl;
             ihE[vsize-1].push_back(regionBoundary[irB[idissect%bsize]]);
             idissect++;
         }
@@ -3020,13 +3021,13 @@ FLT regnnfrac (int regNum) {
         for (int iregion = 0;iregion<vsize;iregion++)
         {
             int edgeOuter = this->regionList[regNum][iregion];
-            //hhfile << "edgeOuter " << edgeOuter << " region " << regNum << endl;
+            hhfile << "edgeOuter " << edgeOuter << " region " << regNum << endl;
             if (edgeOuter > -1)
             {
                 std::pair<int,int> keypair(regNum,edgeOuter);
                 int keyint = this->pair2int(keypair,this->base);
                 std::pair <int, vector<int>> p1(keyint,ihE[iregion]);
-            //    hhfile << "region " << regNum << " outer " << iregion << " ihE " << endl;
+                hhfile << "region " << regNum << " outer " << iregion << " ihE " << endl;
                 printIntVect(dissectFile, ihE[iregion]);
                 if (this->edges.insert(p1).second) {
                     this->edgeIndex.push_back(keyint);

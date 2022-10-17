@@ -156,7 +156,7 @@ public:
     }; // end of ksSolver constructor
 
 // Constructor with boundary passed in
-    ksSolver (int scale, FLT xspan, string logpath, BezCurvePath<FLT> bound, pair<FLT,FLT> seedPoint, FLT lengthScale=1.0) {
+    ksSolver (int scale, FLT xspan, string logpath, BezCurvePath<float> bound, pair<FLT,FLT> seedPoint, FLT lengthScale=1.0) {
         this->scale = scale;
         this->xspan = xspan;
         this->logpath = logpath;
@@ -293,8 +293,8 @@ public:
         this->lapNN = getLaplacian(inN,this->ds);
         this->CT = chemoTaxis(inN,this->CC,this->ds);
         FLT a = 1., b = 1.;
-        for (int h=0; h < this->n; h++) {
-            dNdt[h] = a-b*inN[h] + Dn*this->lapNN[h] - Dchi*this->CT[h];
+        for (auto h : Hgrid->hexen) {
+            dNdt[h.vi] = a-b*inN[h.vi] + Dn*this->lapNN[h.vi] - Dchi*this->CT[h.vi];
         }
     } //end of method compute_dNNdt
 
@@ -302,12 +302,11 @@ public:
         FLT beta = 5.;
         FLT mu = 1;
 	//cout << " before calls to Laplacian " << endl;
-        vector<FLT> lapC(this->n,0);
         this->lapCC = getLaplacian(inC,this->ds);
         FLT N2;
-        for(int h=0; h < this->n;h++){
-            N2 = this->NN[h]*this->NN[h];
-            dCdt[h] =  beta*N2/(1.+N2) - mu*inC[h] + Dc*lapC[h];
+        for(auto h : Hgrid->hexen){
+            N2 = this->NN[h.vi]*this->NN[h.vi];
+            dCdt[h.vi] =  beta*N2/(1.+N2) - mu*inC[h.vi] + Dc*this->lapCC[h.vi];
         }
     } //end of compute_dCCdt
 
@@ -623,5 +622,234 @@ public:
         cout << "centre x "<< centre.first << " centre y " << centre.second << " centreMove.x " << result.first << " centreMove.y " << result.second <<endl;
         return result;
     } //end of function set_polars
+
+
+    /* sectorize over radius adapted for digital output
+     * unlike the old region.h we cannot directly fill from the NN field because this is different when we integrate
+     * using the methods in region.h where the h.vi refer to the global positions of the hexes and are unique
+     * and the use from main programs that use ksSolver for each region
+     */
+    vector <FLT> sectorize_Circle_radius (int numSectors, int beginAngle, int endAngle, vector<FLT> fieldVal) {
+        ofstream dfile ( this->logpath + "/sectorRadius.txt");
+        ofstream efile ( this->logpath + "/sectorRadius.data");
+        vector <FLT> radiusNN;
+        vector <FLT> normalNN;
+        vector<int> radiusCount;
+        radiusNN.resize(numSectors,0);
+        radiusCount.resize(numSectors,0);
+        FLT startradius, finishradius, radiusInc; //sector radii
+        FLT maxradius = this->max_radius();
+        FLT minradius = this->min_radius();
+        dfile << " maxradius used " << maxradius << " minradius used " << minradius <<endl;
+        radiusInc = maxradius /(1.0*numSectors);
+        FLT startAngle, finishAngle, angleInc; //sector angles
+        angleInc = 2*PI/(1.*numSectors);
+        startAngle = (beginAngle)*angleInc;
+        finishAngle = (endAngle)*angleInc;
+        for (unsigned int i=0; i<fieldVal.size(); i++){
+            normalNN.push_back(fabs(fieldVal[i]));
+        }
+// to count and add the fields in the sector
+        for (int k=0;k<numSectors;k++) {
+            startradius = (k*radiusInc);
+            finishradius = (k+1)*radiusInc;
+            int count = 0;
+            for (auto h : this->Hgrid->hexen) {
+                if (h.phi >= startAngle && h.phi < finishAngle) {
+                    if (h.r >= startradius && h.r < finishradius) {
+                        radiusCount[k]++;
+                        radiusNN[k] += normalNN[count];
+                    } //end of if on radius
+                } //end of if on angleSector
+                count++;
+            } //end of loop over hexes in and individual region
+        }//end of loop over all regions
+
+        dfile << "after creation of sectorized field  " <<  endl;
+        FLT maxradiusNN = -999.99;
+        for (int k=0; k<numSectors; k++) {
+            radiusNN[k]  = radiusNN[k]  / (1.*radiusCount[k]);
+            if (fabs(radiusNN[k]) > maxradiusNN) {
+               maxradiusNN = fabs(radiusNN[k]);
+            }
+        }
+        dfile << "maxradiusNN " << maxradiusNN << std::endl;
+
+        for (int k=0;k<numSectors;k++){
+            startradius = (k*radiusInc);
+            finishradius = (k+1)*radiusInc;
+            dfile << " startradius "<<startradius<<"  finishradius "<<finishradius<< " radiusNN " << radiusNN[k] << " radiusCount " << radiusCount[k] << endl;
+            radiusNN[k]  = radiusNN[k]  / (1.* maxradiusNN);
+            efile << radiusNN[k] << std::endl;
+        }//end loop over sectors
+        dfile << endl;
+        return radiusNN;
+    } //end of function sectorize_radius
+
+    /* function to count the hexes in sectors of a region via angular sectors digital version
+     * unlike the old region.h we cannot directly fill from the NN field because this is different when we integrate
+     * using the methods in region.h where the h.vi refer to the global positions of the hexes and are unique
+     * and the use from main programs that use ksSolver for each region
+     */
+    vector <FLT> sectorize_Circle_angle (int numSectors, int beginradius, int endradius, vector<FLT> fieldVal) {
+        ofstream cfile (this->logpath + "/sectorAngle.txt");
+        ofstream efile (this->logpath + "/sectorAngle.data");
+ //std::pair<FLT,FLT> diff; //difference between seed point and CoG of region
+        vector <FLT> angleNN;
+        vector <FLT> normalNN;
+        vector <int> angleCount; //number of hexes in each sector
+        angleNN.resize(numSectors,0);
+        angleCount.resize(numSectors,0);
+        FLT startAngle, endAngle, angleInc; //sector angles
+        FLT startradius, finishradius,radiusInc;
+        FLT maxradius = this->max_radius();
+        FLT minradius = this->min_radius();
+        radiusInc = maxradius/ (1.0*numSectors);
+        startradius = beginradius*radiusInc;
+        finishradius = endradius*radiusInc;
+        angleInc = 2*PI/(1.*numSectors);
+        cfile << " maxradius used " << maxradius << " minradius used " << minradius <<endl;
+        cfile << " startradius  " << startradius << " finishradius " << finishradius <<endl;
+// to normalise the NN field
+        for (unsigned int i=0; i<fieldVal.size(); i++){
+            normalNN.push_back(fieldVal[i]);
+        }
+
+        for (int k=0;k<numSectors;k++) {
+            startAngle = k*angleInc;
+            endAngle = (k+1)*angleInc;
+            if ((k+1) == numSectors)
+               endAngle = 2*PI;
+            cfile << " start of numSectors loop " << k << endl;
+            int count = 0;
+            for (auto &h : this->Hgrid->hexen) {
+                if (h.r >= startradius && h.r < finishradius) {
+                    if (h.phi >=startAngle && h.phi < endAngle) {
+                    angleCount[k]++;
+                    angleNN[k] += normalNN[count];
+                    }//end if on angle
+                }//end if on radius
+                count++;
+            } //end if over hexes in a region
+            angleNN[k]  = angleNN[k]  / (1.*angleCount[k]);
+            cfile << " startangle  " << startAngle << "  endAngle  "<< endAngle << " angleNN " << angleNN[k] << endl;
+        } // end over all sectors
+
+        FLT maxangleNN = -999.99;
+        for (int k=0; k<numSectors; k++) {
+            if (fabs(angleNN[k]) > maxangleNN) {
+                maxangleNN = fabs(angleNN[k]);
+            }
+        }
+        cfile << "maxangleNN " << maxangleNN << std::endl;
+        for (int k=0; k<numSectors; k++) {
+            angleNN[k] = angleNN[k] /  maxangleNN;
+            efile << angleNN[k] << std::endl;
+        }//end over all sectors
+
+        return angleNN;
+    } //end of function sectorize_region
+
+    FLT max_radius() {
+            std::pair<FLT, FLT> boundHex;
+            std::pair<FLT, FLT>  barycentre;
+            boundHex.first = 0.0;
+            boundHex.second = 0.0;
+            //morphing needs to work with centres, not barycentre
+            barycentre.first = 0.0;
+            barycentre.second = 0.0;
+            FLT maxradius = -100000.0;
+            int count=0;
+            for (auto h : this->Hgrid->hexen) {
+                 count++;
+                 boundHex.first = h.x,
+                 boundHex.second = h.y;
+                 FLT boundDist = getdist(boundHex,barycentre);
+
+                 if (boundDist > maxradius)
+                     maxradius = boundDist;
+            }
+            std::cout << " maxradius boundary hexes" << count << " maxradius " << maxradius << endl;
+            return maxradius;
+        }
+
+// returns the shortest distace from the seed point to the region boundary
+      FLT min_radius() {
+          std::pair<FLT, FLT>  barycentre;
+          std::pair<FLT, FLT> boundHex;
+          boundHex.first = 0.0;
+          boundHex.second = 0.0;
+          // morphing needs to work with centres, not barycentres
+          barycentre.first = 0.0;
+          barycentre.second = 0.0;
+          FLT minradius = 100000.0;
+          int count = 0;
+          FLT boundDist;
+          for (auto h : this->Hgrid->hexen) {
+              if (h.boundaryHex()) {
+                   count++;
+                   boundHex.first = h.x,
+                   boundHex.second = h.y;
+                   boundDist = getdist(boundHex,barycentre);
+                   if (boundDist < minradius) {
+                       minradius = boundDist;
+                   }
+              }
+          }
+          std::cout << " minradius boundary hexes " << count << " minradius " << minradius << std::endl;
+          return minradius;
+      }
+
+    // transform vector so its mean is zero
+    vector<FLT> meanzero_vector(vector<FLT> invector) {
+        ofstream meanzero ("meanzero.txt",ios::app);
+        vector <FLT> result;
+        unsigned int size = invector.size();
+        meanzero << "size " << size << endl;
+        FLT sum = 0;
+        FLT absSum = 0;
+        for (unsigned int i=0; i <size; i++) {
+            sum += invector[i];
+            absSum += fabs(invector[i]);
+        }
+        sum = sum/(1.0*size);
+        absSum = absSum / (1.0 * size);
+        meanzero << " mean  " << sum << endl;
+        meanzero << " absolute mean  " << absSum << endl;
+        for (unsigned int i=0; i < size; i++) {
+            result.push_back(invector[i] - sum);
+            meanzero << " i " << result[i] << endl;
+        }
+        return result;
+    }
+
+    FLT maxVal( vector<FLT> invector) {
+            FLT result = -1.0e7;
+            for (unsigned int i = 0; i < invector.size(); i++) {
+                    if (invector[i] > result)
+                            result = invector[i];
+            }
+            return result;
+    }
+
+
+    // to find the minimum value of a vector
+    FLT minVal( vector<FLT> invector) {
+            FLT result = 1.0e7;
+            for (unsigned int i = 0; i < invector.size(); i++) {
+                    if (invector[i] < result)
+                            result = invector[i];
+            }
+            return result;
+    }
+
+    /*!
+     * Euclidean distance between two points
+     */
+    FLT getdist(std::pair<FLT, FLT> a, std::pair<FLT, FLT>  b) {
+        FLT result;
+        result = sqrt((a.first-b.first)*(a.first-b.first) + (a.second-b.second)*(a.second-b.second));
+        return result;
+    }
 
 }; //end of class KSsolver

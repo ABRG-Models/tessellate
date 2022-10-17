@@ -172,8 +172,6 @@ int main (int argc, char **argv)
     steady_clock::time_point lastrender = steady_clock::now();
 
 #endif
-
-/*
 //section for rectangular grid
     float xwidth = 2.0f;
     float ywidth = 2.0f;
@@ -192,8 +190,7 @@ int main (int argc, char **argv)
         std::cerr << "error rowlen*numrows " << rowlen*numrows << " S.n " << S.n << std::endl;
         //return -1;
     }
-*/
-
+/*
 // Constructor for parallelogram domain
     std::cout << "first the values for the corners reported from morphologica methods" << std::endl;
     shSolver S(scale,  xspan, logpath, lengthScale, sigma, lPeriodic);
@@ -219,6 +216,7 @@ int main (int argc, char **argv)
     std::cout << "bot right " << S.Hgrid->d_x[rowlen-1] << " , " << S.Hgrid->d_y[rowlen-1] << std::endl;
     std::cout << "top left " << S.Hgrid->d_x[topLeftIndex] << " , " << S.Hgrid->d_y[topLeftIndex] << std::endl;
     std::cout << "top right " << S.Hgrid->d_x[topRightIndex] << " , " << S.Hgrid->d_y[topRightIndex] << std::endl;
+    */
 /*
     if ((numrows-1)%4 == 0) {
         S.setPeriodicEven();
@@ -313,9 +311,9 @@ int main (int argc, char **argv)
 
     // A. Offset in x direction to the left.
     // by half a hexGrid width
-    float xzero = -0.4*hexWidth;
-    float yzero = 0.0;
-    float txtoff = -0.5f;
+    float xzero = -0.60*hexWidth;
+    float yzero = 0.60*hexWidth;
+    float txtoff = -0.55f;
 
     spatOff = { xzero, yzero, 0.0 };
     morph::ColourMapType cmt = morph::ColourMap<FLT>::strToColourMapType (conf.getString ("colourmap", "Rainbow"));
@@ -337,7 +335,7 @@ int main (int argc, char **argv)
     v1.addVisualModel (hgv1);
     // A. Offset in x direction to the right.
     // move back a whole hexGrid width
-    xzero += hexWidth*0.8;
+    xzero += hexWidth + 0.1f;
     spatOff = { xzero, yzero, 0.0 };
     cmt = morph::ColourMap<FLT>::strToColourMapType (conf.getString ("colourmap", "Greyscale"));
     morph::HexGridVisual<FLT>* hgv2 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
@@ -356,7 +354,6 @@ int main (int argc, char **argv)
     v1.addVisualModel (hgv2);
 
     std::cout << "after hgv2 " << std::endl;
-    /*
     // A. Offset in y direction down.
     // move down a whole hexGrid width
     yzero -= hexWidth + 0.1f;
@@ -376,6 +373,7 @@ int main (int argc, char **argv)
 
     // A. Offset in x direction left.
     // move back a whole hexGrid width
+    /*
     xzero -= S.Hgrid->width();
     spatOff = { xzero, yzero, 0.0 };
     morph::HexGridVisual<FLT>* hgv4 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
@@ -389,6 +387,7 @@ int main (int argc, char **argv)
     hgv4->addLabel ("Phi phase", {-0.05f, txtoff, 0.0f}, morph::colour::black, morph::VisualFont::VeraSerif, 0.05, 56);
     hgv4->finalize();
     v1.addVisualModel (hgv4);
+    */
 
 
     // Graph of frequency estimate
@@ -434,7 +433,6 @@ int main (int argc, char **argv)
     gvPinDensity->setdata (graphX3, graphY3, ds3);
     gvPinDensity->finalize();
     v1.addVisualModel (static_cast<morph::VisualModel*>(gvPinDensity));
-    */
 #endif
     std::cout << "after setting up graphics" << std::endl;
     vector<complex<FLT>> oldPsi;
@@ -572,7 +570,7 @@ int main (int argc, char **argv)
             isPinWheel = S.complexZero(phir, low);
             cout << " just after is Pinwheel phi complexZero" << endl;
 #ifdef COMPILE_PLOTTING
-            array<float,3> cl_a = {0.0f, 0.0f, 1.0f};
+            array<float,3> cl_a = {0.0f, 1.0f, 0.0f};
             array<float,3> cl_b = {1.0f, 0.0f, 0.0f};
             array<float,3> cl_c = {0.0f, 0.0f, 0.0f};
             std::vector<morph::Vector<FLT,3>>::iterator pW;
@@ -585,39 +583,38 @@ int main (int argc, char **argv)
             if (lShowPinCentres) {
                 for (pW = pWCoords.begin(); pW != pWCoords.end(); pW++) {
                     morph::Vector<float,3> vtx = *pW;
-                    (*pW)[0] -= hexWidth*0.4;
-                    (*pW)[1] += 0.0;
+                    (*pW)[0] -= hexWidth*0.60;
+                    (*pW)[1] += hexWidth*0.60;
                     vtx += morph::Vector<float, 3>({1,0,0});
                     //v1.addVisualModel (new morph::PolygonVisual (v1.shaderprog, offset2, *pW, vtx, sz, 0.01f, cl_c, 6));
-                    (*pW)[0] += hexWidth*0.8;
+                    (*pW)[0] += hexWidth+0.10f;
                     (*pW)[1] += hexWidth*0.0;
-                    v1.addVisualModel (new morph::PolygonVisual (v1.shaderprog, offset2, *pW, vtx, sz*1.5, 0.01f, cl_b, 6));
+                    v1.addVisualModel (new morph::PolygonVisual (v1.shaderprog, offset2, *pW, vtx, sz/2.0f, 0.01f, cl_b, 6));
                 }
                 std::cout << "just after pW in  lShowPinCentres" << std::endl;
                 for (pW1 = pWCoords1.begin(); pW1 != pWCoords1.end(); pW1++) {
                     morph::Vector<float,3> vtx = *pW1;
-                    (*pW1)[0] -= hexWidth*0.4;
-                    (*pW1)[1] += 0.0;
+                    (*pW1)[0] -= hexWidth*0.60;
+                    (*pW1)[1] += hexWidth*0.60;
                     vtx += morph::Vector<float, 3>({1,0,0});
                     //v1.addVisualModel (new morph::PolygonVisual (v1.shaderprog, offset2, *pW1, vtx, sz, 0.01f, cl_c, 6));
-                    (*pW1)[0] += hexWidth*0.8;
+                    (*pW1)[0] += hexWidth+0.10f;
                     (*pW1)[1] += hexWidth*0.0;
-                    v1.addVisualModel (new morph::PolygonVisual (v1.shaderprog, offset2, *pW1, vtx, sz*1.5, 0.01f, cl_a, 6));
+                    v1.addVisualModel (new morph::PolygonVisual (v1.shaderprog, offset2, *pW1, vtx, sz/2.0f, 0.01f, cl_a, 6));
                 }
                 std::cout << "just after pWi1 in  lShowPinCentres" << std::endl;
-                /*
                 for (pW3 = pWCoords3.begin(); pW3 != pWCoords3.end(); pW3++) {
                     morph::Vector<float,3> vtx = *pW3;
-                    (*pW3)[0] -= hexWidth*0.6;
-                    (*pW3)[1] += 0.0;
+                    (*pW3)[0] -= hexWidth*0.60;
+                    (*pW3)[1] += hexWidth*0.60;
                     vtx += morph::Vector<float, 3>({1,0,0});
                     v1.addVisualModel (new morph::PolygonVisual (v1.shaderprog, offset2, *pW3, vtx, sz, 0.01f, cl_c, 6));
                     (*pW3)[0] += hexWidth+0.10f;
                     (*pW3)[1] += hexWidth*0.0;
-                    v1.addVisualModel (new morph::PolygonVisual (v1.shaderprog, offset2, *pW3, vtx, sz, 0.0f, cl_c, 6));
+                    v1.addVisualModel (new morph::PolygonVisual (v1.shaderprog, offset2, *pW3, vtx, sz, 0.01f, cl_c, 6));
                     pwCount ++;
                 }
-                */
+
 
                 std::cout << "pinWheel count via pWCoords3 " << pwCount << std::endl;
             }
@@ -626,16 +623,18 @@ int main (int argc, char **argv)
 
             hgv2->updateData (&psir);
             hgv2->clearAutoscaleColour();
-/*
+
             hgv3->updateData (&phiphase);
             hgv3->clearAutoscaleColour();
 
 
             graphX = L.xs;
             graphY = L.ys;
+            /*
             for (int i=0;i<nbins;i++){
                 std::cout << " frequency " << graphX[i] << " power " << graphY[i] << std::endl;
             }
+            */
             int nsamp = nbins-10;
             float xmax = nsamp;
 
@@ -665,7 +664,7 @@ int main (int argc, char **argv)
             gvPinDensity->update (graphX, graphY, 0);
             gvPinDensity->update (graphX2, graphY2, 1);
             gvPinDensity->update (graphX3, graphY3, 2);
-*/
+
             if (saveplots) {
                 if (vidframes) {
                     savePngs (logpath, "psi", framecount, v1);

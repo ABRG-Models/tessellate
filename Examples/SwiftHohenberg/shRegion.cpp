@@ -1,5 +1,5 @@
-/*!
- * If COMPILE_PLOTTING is defined at compile time, then include the display and
+/*
+* If COMPILE_PLOTTING is defined at compile time, then include the display and
  * plotting code. I usually put all the plotting code inside #defines like this so
  * that I can compile a version of the binary without plotting, for parameter searches
  * in which I am only going to be saving out HDF5 data.
@@ -10,7 +10,7 @@
 #include <morph/ColourMap.h>
 #include <morph/VisualDataModel.h>
 #include <morph/Scale.h>
-#include "shCSolver.h"
+#include "shPSolver.h"
 #include "analysis.h"
 #include <morph/Config.h>
 #include <cctype>
@@ -21,15 +21,6 @@
 #include <complex>
 
 //! Helper function to save PNG images with a suitable name
-void savePngs (const std::string& logpath, const std::string& name,
-               unsigned int frameN, morph::Visual& v)
-{
-    std::stringstream ff1;
-    ff1 << logpath << "/" << name<< "_";
-    ff1 << std::setw(5) << std::setfill('0') << frameN;
-    ff1 << ".png";
-    v.saveImage (ff1.str());
-}
 using std::array;
 using std::string;
 using std::stringstream;
@@ -120,6 +111,7 @@ int main (int argc, char **argv)
  #ifdef SINGLE
         float dt = conf.getFloat("dt",0.0001);
         float epsilon = conf.getFloat("epsilon",5.0);
+        float k0 = conf.getFloat("k0",10.0);
         float  g = conf.getFloat("g",5.0);
         float  xspan = conf.getFloat("xspan",5.0);
         float  boundaryFalloffDist = conf.getFloat("boundaryFalloffDist",0.0078);
@@ -129,9 +121,12 @@ int main (int argc, char **argv)
         float  x_default = conf.getFloat("x_default",0.0);
         float  y_default = conf.getFloat("y_default",0.0);
         float  wratio = conf.getFloat("wratio", 0.844f);
+        float  lengthScale = conf.getFloat("lengthScale",29.0f);
+        float  sigma = conf.getFloat("sigma",0.3f);
 #else
         double dt = conf.getDouble("dt",0.0001);
         double epsilon = conf.getDouble("epsilon",5.0);
+        double k0 = conf.getDouble("k0",10.0);
         double g = conf.getDouble("g",5.0);
         double xspan = conf.getDouble("xspan",5.0);
         double boundaryFalloffDist = conf.getDouble("boundaryFalloffDist",0.0078);
@@ -141,6 +136,8 @@ int main (int argc, char **argv)
         double  x_default = conf.getDouble("x_default",0.0);
         double  y_default = conf.getDouble("y_default",0.0);
         double  wratio = conf.getDouble("wratio", 0.844f);
+        double lengthScale = conf.getDouble("lengthScale",29.0);
+        double sigma = conf.getDouble("sigma", 0.3);
 #endif
     int scale = conf.getInt("scale",8);
     int numsteps = conf.getInt("numsteps",100);
@@ -148,6 +145,7 @@ int main (int argc, char **argv)
     int numprint = conf.getInt("numprint",95);
     string logpath = conf.getString("logpath","./logsSwiftHohenberg");
     int numSectors = conf.getInt("numsectors",12);
+    int numpoints = conf.getInt("numpoints",20);
     int red = conf.getInt("red",100);
     int green = conf.getInt("green",100);
     int fov = conf.getInt("fov",45);
@@ -156,14 +154,14 @@ int main (int argc, char **argv)
     bool overwrite_logs = conf.getBool("overwrite_logs",1);
 
     //need to fix this to conform with other region files
-    unsigned int numpoints;
-    numpoints = 10;
-
+#ifdef COMPILE_PLOTTING
     //set up a vtxVisual pointer
     vtxVisual* cv;
+#endif
+
 
 // initialise DRegion class setting scale
-    cout << "before Dregion" << endl;
+    cout << "before Dregion" << " numpoints " << numpoints << endl;
     DRegion M(scale,xspan,logpath,numpoints); //create tessellation
     cout << "after Dregion" << endl;
     M.setCreg(); //set counts to identify inner boundaries
@@ -174,19 +172,6 @@ int main (int argc, char **argv)
     cout << "Edges size = " << M.edges.size() << endl;
     M.setRadialSegments(); //set the radial segments for regions
     int inReg = 0;
-    inReg = M.setInnerRegion(); //set mask array for inner regions
-    int rC = 0;
-    //check for correct number of inner regions
-    for (unsigned int j=0; j<numpoints;j++) {
-        if (!M.innerRegion[j]) rC++;
-    }
-    if (inReg != rC) {
-        cout << "Error: setInnerRegion returns " << inReg << " but outerRegions " << rC << endl;
-        return -1;
-    }
-    else {
-        cout << "Success: setInnerRegion no of outer regions " << inReg << endl;
-    }
     cout << "after first setRadialSegments " << endl;
 // include the analysis methods
     Analysis L;
@@ -202,8 +187,12 @@ int main (int argc, char **argv)
      */
     M.populateBoundPolygon(1);
     cout << "just after setting polygonal boundaries " << M.curvedBoundary.size()<<endl;
+    cout << "first setting of centroids" << endl;
+    for (unsigned int j=0; j<numpoints;j++){
+        std::cout  << "centroid region " << j << " is ( " << M.centroids[j].first << " , " << M.centroids[j].second << " )" << endl;
+    }
     for (unsigned int j = 0;j<numpoints;j++) {
-        S.push_back(shSolver(scale, xspan, logpath, M.curvedBoundary[j], M.centroids[j]));
+        S.push_back(shSolver(scale, xspan, logpath, M.curvedBoundary[j], M.centroids[j], lengthScale));
         cout << "in the loop populating the schVector morph0 "<< j <<endl;
     }
     /*now set the parameters for each solver
@@ -211,10 +200,6 @@ int main (int argc, char **argv)
         S[j].setParams(D_A, D_B, k1, k2, k3, k4);
     }
     */
-    cout << "first setting of centroids" << endl;
-    for (unsigned int j=0; j<numpoints;j++){
-        std::cout  << "centroid region " << j << " is ( " << M.centroids[j].first << " , " << M.centroids[j].second << " )" << endl;
-    }
     // repopulate the regions
     cout << "just before populating the regions Morph 0" << endl;
     for (unsigned int j=0;j<numpoints;j++)
@@ -258,7 +243,7 @@ int main (int argc, char **argv)
 
     // Window width and height
     const unsigned int win_width = conf.getUInt ("win_width", 2050UL);
-    unsigned int win_height_default = static_cast<unsigned int>(0.88f * (float)win_width);
+    unsigned int win_height_default = static_cast<unsigned int>(wratio * (float)win_width);
     const unsigned int win_height = conf.getUInt ("win_height", win_height_default);
     cout << "just before new Visual object" << endl;
     // Set up the morph::Visual object which provides the visualization scene (and
@@ -343,7 +328,7 @@ int main (int argc, char **argv)
     float xzero = 0.0f;
 
     // A. Offset in x direction to the left.
-    xzero = 0.7;
+    xzero = 0.95;
     spatOff = { xzero, 0.0, 0.0 };
     // Z position scaling - how hilly/bumpy the visual will be.
     Scale<FLT,float> zscale; zscale.setParams (0.0f, 0.0f);
@@ -366,7 +351,7 @@ int main (int argc, char **argv)
                                                                     morph::ColourMapType::Jet));
     }//end of loop over regions
     // A. Offset in x direction to the left.
-    xzero -= 1.2 * M.Hgrid->width();
+    xzero -= 1.05 * M.Hgrid->width();
     spatOff = { xzero, 0.0, 0.0 };
     // Z position scaling - how hilly/bumpy the visual will be.
     unsigned int Bgrid[numpoints];
@@ -400,19 +385,26 @@ int main (int argc, char **argv)
         Apre[j].resize(S[j].A.size(),10000.0);
     }
     */
+   std::cout << "before settng oldPsi" << std::endl;
     vector<vector<complex<FLT>>> oldPsi;
     oldPsi.resize(numpoints);
     for (unsigned int j=0; j<numpoints; j++) {
         oldPsi[j].resize(S[j].n,0.0);
+   std::cout << "after settng oldPsi" << std::endl;
         oldPsi[j] = S[j].psi;
     }
+   std::cout << "after settng oldPsi" << std::endl;
     for (int i=0;i<numsteps;i++) {
         for (unsigned int j=0; j<numpoints; j++) {
             //std::cerr << "before step " << i << std::endl;
-            S[j].step(dt, epsilon, g, oldPsi[j]);
+            S[j].step(dt, epsilon, g, k0, oldPsi[j]);
             //std::cerr << "after step " << i << std::endl;
             oldPsi[j] = S[j].psi;
         } // end of time stepping
+        if ((i % numprint) == 0) {
+            std::cerr<< "at iteration " << i << " numprint " << numprint << std::endl;
+            std::cout<< "at iteration " << i << " numprint " << std::endl;
+        }
 #ifdef COMPILE_PLOTTING
         if ((i % numprint) == 0) {
             for(unsigned int j=0; j<numpoints; j++) {
@@ -433,35 +425,20 @@ int main (int argc, char **argv)
                 VisualDataModel<FLT>* hgv2 = (VisualDataModel<FLT>*)v1->getVisualModel (Bgrid[j]);
                 hgv2->updateData (&B);
                 hgv2->clearAutoscaleColour();
-                if (saveplots) {
-                    if (vidframes) {
-                        savePngs (logpath, "psi", framecount, *v1);
-                        ++framecount;
-                    }
-                    else {
-                        savePngs (logpath, "psi", i , *v1);
-                    }
-                }
-
-                cout << " just before isPinWheel psi complexZero" << endl;
-                vector<FLT> isPinWheel = S[j].complexZero(L.getAbs(S[j].psi));
-                for (unsigned int i=0; i<isPinWheel.size();i++) {
-                    std::cout << "isPinwheel psi " << isPinWheel[i] << std::endl;
-                }
-
-                cout << " just after is Pinwheel psi complexZero" << endl;
-                cout << " just before isPinWheel phi complexZero" << endl;
-                isPinWheel.resize(0);
-                isPinWheel = S[j].complexZero(L.getAbs(S[j].phi));
-                for (unsigned int i=0; i<isPinWheel.size();i++) {
-                    std::cout << "isPinwheel psi " << isPinWheel[i] << std::endl;
-                }
-                cout << " just after is Pinwheel phi complexZero" << endl;
             }//end of plotting over regions
             v1->render();
+            if (saveplots) {
+                if (vidframes) {
+                    savePngs (logpath, "psi", framecount, *v1);
+                    ++framecount;
+                }
+                else {
+                    savePngs (logpath, "psi", i , *v1);
+                }
+            }
         } // end of print on plotevery
         // rendering the graphics. After each simulation step, check if enough time
-        // has elapsed for it to be necessary to call v1.render().
+
         steady_clock::duration sincerender = steady_clock::now() - lastrender;
         if (duration_cast<milliseconds>(sincerender).count() > 17000) { // 17 is about 60 Hz
             glfwPollEvents();
@@ -480,11 +457,22 @@ int main (int argc, char **argv)
         M.A[j] = B; //write the A fields to the DRegion array
     }
     FLT avAbsCorrelation = 0;
-    cout << "just after renewcorrelate_edges morph1 " << endl;
+    cout << "just after renewcorrelate_edges psi " << endl;
     avAbsCorrelation = M.correlate_edges(0);
-    const int max_comp = numpoints*3;
-    M.random_correlate(max_comp, 0);
-    cout << "just after randomcorrelate_edges morph1 " << endl;
+    //const int max_comp = numpoints*3;
+    //M.random_correlate(max_comp, 0);
+    cout << "average correlation " << avAbsCorrelation << endl;
+//code run at end of timestepping
+    for (unsigned int j=0;j<numpoints;j++) {
+        vector<FLT> C;
+        C.resize(S[j].n);
+        C = L.getAbs(S[j].psi);
+        M.A[j] = C; //write the A fields to the DRegion array
+    }
+    avAbsCorrelation = 0;
+    cout << "just after renewcorrelate_edges psi1 " << endl;
+    avAbsCorrelation = M.correlate_edges(1);
+    cout << "average correlation " << avAbsCorrelation << endl;
 /*first save the  ofstream outFile;
     string fname = logpath + "/first.h5";
     morph::HdfData data(fname);
@@ -494,10 +482,6 @@ int main (int argc, char **argv)
     data.add_val ("/epsilon", epsilon); //Dn paramater
     cout << " just after writing data "  << endl;
 */
-#ifdef COMPILE_PLOTTING
-    cout << "Ctrl-c or press x in graphics window to exit.\n";
-    v1->keepOpen();
-#endif
 
     return 0;
 };

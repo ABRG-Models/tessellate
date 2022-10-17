@@ -29,11 +29,13 @@ using namespace std;
 class Analysis {
 //global class variables
 public:
+//dont create a class instance of extremum
+//caused all sorts of trouble
+//create function based instances of extremum
   struct extremum {
   int radialIndex;
   FLT radialValue;
   };
-  vector<extremum> turnVal; //radial turning points
 
   //default constructor
 
@@ -109,16 +111,6 @@ public:
         sum = sum/(1.0*size);
         return result;
     }
-    //function to smooth a vector by moving average
-    vector <FLT> smooth_vector(vector<FLT> invector, int window) {
-        vector<FLT> outvector;
-        int size = invector.size();
-        outvector.resize(size);
-        for (int i=1; i<size+1; i++) {
-            outvector[i%size] = (invector[(i -1)%size] + invector[i%size] + invector[(i + 1)%size])/3.0;
-        }
-        return outvector;
-    }
 
 	vector <FLT> normalise (vector <FLT> invector) {
 	  vector <FLT> result;
@@ -158,21 +150,18 @@ mix (unsigned int a, unsigned int b, unsigned int c)
 
 
   //function find_max to find turning points both values and indices.
-    int find_extrema(vector<FLT> ray, int window=0) {
+    int find_extrema_angle(vector<FLT> ray, int window=0) {
         int size = ray.size();
-        vector<FLT> smoothRay;
-        smoothRay = this->smooth_vector(ray, window);
-        turnVal.resize(1000);
+        if (size == 0) {
+            return -1;
+        }
         FLT old_slope = 0;
         FLT new_slope = 0;
         int count = 0;
-        old_slope = smoothRay[1] - smoothRay[0];
-        for (int i =2; i<=size+1;i++){
-            new_slope = smoothRay[i%size]-smoothRay[(i-1)%size];
+        old_slope = ray[1] - ray[0];
+        for (int i=1; i<=size; i++){
+            new_slope = ray[i%size]-ray[(i-1)%size];
             if (new_slope*old_slope < 0.) {
-                turnVal[count].radialIndex = i;
-                turnVal[count].radialValue = smoothRay[i]; //should really interpolate
-                std::cout << "turn index " << turnVal[count].radialIndex << " turn value " << turnVal[count].radialValue << endl;
                 count++;
             }
             old_slope = new_slope;
@@ -180,21 +169,41 @@ mix (unsigned int a, unsigned int b, unsigned int c)
         return count;
     }
 
+  //function find_max to find turning points both values and indices.
+    int find_extrema_radius(vector<FLT> ray, int window=0) {
+        int size = ray.size();
+        if (size == 0) {
+            return -1;
+        }
+        FLT old_slope = 0;
+        FLT new_slope = 0;
+        int count = 0;
+        old_slope = ray[1] - ray[0];
+        for (int i=1; i<size; i++){
+            new_slope = ray[i%size]-ray[(i-1)%size];
+            if (new_slope*old_slope < 0.) {
+                count++;
+            }
+            old_slope = new_slope;
+        }
+        return count;
+    }
   //function return indices of maxima in an array.
     vector<int> find_maxIndices(vector<FLT> ray, int window=0) {
     vector<int> result;
     result.resize(0);
     int size = ray.size();
-    vector<FLT> smoothRay;
-    smoothRay = this->smooth_vector(ray, window);
+        if (size == 0) {
+            return result;
+        }
     FLT old_slope = 0.0;
     FLT new_slope = 0.0;
-    old_slope = smoothRay[1] - smoothRay[0];
+    old_slope = ray[1] - ray[0];
     for (int i=2; i<=size+2; i++){
-        new_slope = smoothRay[i%size]-smoothRay[(i-1)%size];
+        new_slope = ray[i%size]-ray[(i-1)%size];
         if (old_slope < 0.0 && new_slope > 0.0) {
             result.push_back(i);
-            std::cout << "turn index " << i << " turn value " << (smoothRay[i%size] + smoothRay[(i+1)%size])/2.0 << " old slope " << old_slope << " new slope " << new_slope  << endl;
+            std::cout << "turn index " << i << " turn value " << (ray[i%size] + ray[(i+1)%size])/2.0 << " old slope " << old_slope << " new slope " << new_slope  << endl;
         }
       old_slope = new_slope;
     }
@@ -203,30 +212,38 @@ mix (unsigned int a, unsigned int b, unsigned int c)
 
 // find the zeros in a ray angular
     int find_zeroDAngle(vector<int> ray) {
-    int size = ray.size();
-    //ofstream zerofile ("zero.txt",ios::app);
-    int old_val = ray[0];
-    int new_val;
-    int count = 0;
-    for (int i = 1 ; i<size+1;i++){
-        if (ray[i%size] != 0) {
-           new_val = ray[i%size];
-           if (old_val*new_val == -1) {
-                   count++;
-           }
-        old_val = new_val;
+        int size = ray.size();
+        if (size == 0) {
+            return 0;
         }
-      //zerofile << " radius " << i%size << " " << old_val << " "<<new_val <<endl;
-      }
-    return count;
-  }
+        //ofstream zerofile ("zero.txt",ios::app);
+        int old_val = ray[0];
+        int new_val;
+        int count = 0;
+        for (int i = 1 ; i<size+1;i++){
+            new_val = ray[i%size];
+            if (new_val == 0.0) {
+                count++;
+                new_val = old_val;
+               continue;
+            }
+            if (old_val*new_val == -1) {
+                count++;
+            }
+            old_val = new_val;
+        }
+        //zerofile << " radius " << i%size << " " << old_val << " "<<new_val <<endl;
+        return count;
+    }
 
 // find the indices of zeros in a ray angular
     vector<int> find_zeroIndices(vector<FLT> ray) {
     vector<int> result;
     result.resize(0);
-    result.resize(0);
     int size = ray.size();
+        if (size == 0) {
+            return result;
+        }
     ofstream zerofile ("./zero.txt",ios::app);
     zerofile << "size = " << size << endl;
     FLT oldVal = ray[0];
@@ -234,16 +251,21 @@ mix (unsigned int a, unsigned int b, unsigned int c)
     int count = 0;
     for (int i = 1 ; i<size+1; i++){
       //  if (ray[i%size] != 0.0) {
-           FLT newVal = ray[i%size];
-           FLT norm = fabs(oldVal*newVal);
-           if (oldVal*newVal/norm < 0.0 && oldVal <0.0) {
-                zerofile << " radius " << i%size << " " << oldVal << " "<< newVal << " ray[i] " << ray[i%size] << endl;
+           FLT new_val = ray[i%size];
+           FLT norm = fabs(oldVal*new_val);
+           if (new_val == 0.0) {
+               result.push_back(i);
+               new_val = oldVal;
+               continue;
+           }
+           if (oldVal*new_val/norm < 0.0 && oldVal <0.0) {
+                zerofile << " radius " << i%size << " " << oldVal << " "<< new_val << " ray[i] " << ray[i%size] << endl;
                  result.push_back(i);
                  count++;
            }
-        oldVal = newVal;
+        oldVal = new_val;
         //}
-      zerofile << " radius " << i%size << " " << oldVal << " "<< newVal << " ray[i] " << ray[i%size] << endl;
+      zerofile << " radius " << i%size << " " << oldVal << " "<< new_val << " ray[i] " << ray[i%size] << endl;
       }
       zerofile << "number of zeros " << count << endl;
       return result;
@@ -252,100 +274,114 @@ mix (unsigned int a, unsigned int b, unsigned int c)
 
  // find the zeros in a ray radial
     int find_zeroDRadius(vector<int> ray) {
-    int size = ray.size();
-    //ofstream zerofile ("zero.txt",ios::app);
-    int old_val = ray[0];
-    int new_val;
-    int count = 0;
-    for (int i = 1 ; i<size;i++){
-        if (ray[i%size] != 0) {
-           new_val = ray[i%size];
-           if (old_val*new_val == -1) {
-                   count++;
-           }
-        old_val = new_val;
+        ofstream zerofile ("zero.txt",ios::app);
+        int size = ray.size();
+        if (size == 0) {
+            zerofile << "size is 0" << std::endl;
+            return 0;
         }
-      //zerofile << " angle " << i%size << " " << old_val << " "<<new_val <<endl;
-      }
-    return count;
-  }
+        int old_val = ray[0];
+        int new_val;
+        int count = 0;
+        for (int i = 1 ; i<size;i++){
+            new_val = ray[i%size];
+            if (new_val == 0.0) {
+                new_val = old_val;
+                count++;
+                zerofile << " rad i " << size << " " << old_val << " "<<new_val <<endl;
+                continue;
+            }
+            if (old_val*new_val == -1) {
+                zerofile << " rad i " << size << " " << old_val << " "<<new_val <<endl;
+                count++;
+            }
+            old_val = new_val;
+        }
+        return count;
+    }
 
 
 // find the zeros in a ray angular
     int find_zeroRadius(vector<int> ray) {
-    int size = ray.size();
-    //ofstream zerofile ("zero.txt",ios::app);
-    int old_val = 0;
-    int new_val = 0;
-    int count = 0;
-    for (int i =0; i<size;i++){
-        if (ray[i%size] != 0) {
-           new_val = ray[i%size];
-           if (old_val*new_val == -1) {
-                   count++;
-           }
-	   old_val = new_val;
+        int size = ray.size();
+        if (size == 0) {
+            return -1;
+        }
+        //ofstream zerofile ("zero.txt",ios::app);
+        int old_val = 0;
+        int new_val = 0;
+        int count = 0;
+        for (int i =0; i<size;i++){
+            new_val = ray[i%size];
+            if (new_val == 0.0) {
+                new_val = old_val;
+                count++;
+                continue;
+            }
+            if (old_val*new_val < 0.0) {
+                count++;
+            }
+            old_val = new_val;
         }
       //zerofile << " " << i%size << " " << old_val << " "<<new_val <<endl;
-      }
-    return count;
-  }
+        return count;
+    }
 
 
     // find the zeros in a ray angular
     int find_zeroAngle(vector<FLT> ray, int window) {
-    int size = ray.size();
-    // ofstream zerofile ("zero.txt",ios::app);
-    vector<FLT> smoothRay;
-    //smoothRay = this->smooth_vector(ray, window);
-    smoothRay = ray;
-    //zerofile <<"size = " << size <<endl;
-    turnVal.resize(1000);
-    FLT old_val = 0;
-    FLT new_val = 0;
-    int count = 0;
-    old_val = smoothRay[0];
-    for (int i =1; i<size+1;i++){
-      new_val = smoothRay[i%size];
-      //zerofile << " " << i%size << " " << old_val << " "<<new_val <<endl;
-      if (new_val*old_val < 0.0) {
-	turnVal[count].radialIndex = i;
-	turnVal[count].radialValue =smoothRay[i]; //should really interpolate
-        //zerofile << "turn index " << turnVal[count].radialIndex << " turn value " << turnVal[count].radialValue << endl;
-        count++;
-      }
-      old_val = new_val;
+        int size = ray.size();
+        if (size == 0) {
+            return -1;
+        }
+        //ofstream zerofile ("zero.txt",ios::app);
+        FLT old_val = 0;
+        FLT new_val = 0;
+        int count = 0;
+        old_val = ray[0];
+        for (int i =1; i<size+1;i++){
+            new_val = ray[i%size];
+            if (new_val == 0.0) {
+                new_val = old_val;
+                count++;
+                continue;
+            }
+            if (new_val*old_val < 0.0) {
+                count++;
+            }
+            old_val = new_val;
+        }
+        return count;
     }
-    return count;
-  }
 
       // find the zeros in a radial ray
     int find_zeroRadius(vector<FLT> ray, int window) {
-    int size = ray.size();
-    //ofstream zerofile ("zero.txt",ios::app);
-     vector<FLT> smoothRay;
-    // smoothRay = this->smooth_vector(ray, window);
-     smoothRay = ray;
-    //zerofile <<"size = " << size <<endl;
+        int size = ray.size();
+        if (size == 0) {
+            return -1;
+        }
+        //ofstream zerofile ("zero.txt",ios::app);
+        //zerofile <<"size = " << size <<endl;
 
-    turnVal.resize(1000);
-    FLT old_val = 0;
-    FLT new_val = 0;
-    int count = 0;
-    old_val = smoothRay[0];
-    for (int i =1; i<size;i++){
-      new_val = smoothRay[i%size];
+        FLT old_val = 0;
+        FLT new_val = 0;
+        int count = 0;
+        old_val = ray[0];
+        for (int i =1; i<size;i++){
+            new_val = ray[i%size];
       //zerofile << " " << i%size << " " << old_val << " "<<new_val <<endl;
-      if (new_val*old_val < 0.) {
-	turnVal[count].radialIndex = i;
-	turnVal[count].radialValue = smoothRay[i]; //should really interpolate
-        //zerofile << "turn index " << turnVal[count].radialIndex << " turn value " << turnVal[count].radialValue << endl;
-        count++;
-      }
-      old_val = new_val;
+            if (new_val == 0.0) {
+                new_val = old_val;
+                count++;
+                continue;
+            }
+        if (new_val*old_val < 0.) {
+            count++;
+        }
+        old_val = new_val;
+        }
+        return count;
     }
-    return count;
-  }
 
     //find the Euclidean norm of a vector
     FLT vectNorm(std::vector<FLT> invector)

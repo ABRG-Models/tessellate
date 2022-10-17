@@ -53,6 +53,8 @@ class Analysis {
     vector<FLT> histogram;
     vector<FLT> xs;
     vector<FLT> ys;
+    arma::vec Xs;
+    arma::vec Ys;
     int nBins, gaussBlur;
     CartHexSampler<FLT> C;
 
@@ -693,70 +695,63 @@ class Analysis {
         return result;
     }
 
-    std::vector<FLT> getPatternFrequency(cv::Mat I, bool showfft) {
+    std::vector<FLT> getPatternFrequency(cv::Mat I, bool showfft, FLT fscale=1.0f) {
         // ANALYSIS STEP 5. ESTIMATE ISO-ORIENTATION COLUMN SPACING
         this->histogram.resize(this->nBins);
         this->binVals.resize(this->nBins,0.f);
         std::cout << "in getpatternFrequency nbins " << this->nBins << std::endl;
 
+        //now get the spectrum for I the field values in the ROI
         std::vector<std::vector<FLT> > h1 = C.fft(I, this->nBins, this->gaussBlur, showfft);
+        std::cout << "in getpatternFrequency after C.fft" << std::endl;
+
 
         //std::cout << "in getpatternFrequency " << std::endl;
         binVals = h1[0];      // get histogram bin mid-values
         histogram = h1[1];
         // sample portion of histogram to fit
         int nsamp = this->nBins;
-        int ioff = 1;
         this->xs.resize(nsamp,0.0);
         this->ys.resize(nsamp,0.0);
-        arma::vec Xs(nsamp-ioff);
-        arma::vec Ys(nsamp-ioff);
+        this->Xs.resize(nsamp);
+        this->Ys.resize(nsamp);
         for(int i=0; i<nsamp; i++){
-            xs[i] = binVals[i];
-            ys[i] = histogram[i];
+            this->xs[i] = binVals[i];
+            this->ys[i] = histogram[i];
+        std::cout << " in getPatternFrequency after vector assignment " << std::endl;
+            this->Xs[i] = binVals[i];
+            this->Ys[i] = histogram[i];
             //std::cout << "xs " << binVals[i] << " ys " << histogram[i] << std::endl;
         }
 
-        for (int i=0; i<nsamp-ioff; i++) {
-            Xs[i] = binVals[i+ioff];
-            Ys[i] = histogram[i+ioff];
-        }
-
+        std::cout << " in getPatternFrequency after vector assignment " << std::endl;
         int polyOrder = 10;
         // do polynomial fit
-        arma::vec cf = arma::polyfit(Xs,Ys,polyOrder);
-
-        // make a high-resolution model for the data
-        arma::vec xfit(nsamp);
-        for(int i=0;i<nsamp;i++){
-            xfit[i] = binVals[nsamp-1]*i/(1.0*(nsamp-1));
-        }
-        arma::vec yfit = arma::polyval(cf,xfit);
-/*
+        arma::vec cf = arma::polyfit(this->Xs,this->Ys,polyOrder);
+        Ys = arma::polyval(cf,this->Xs);
         // get frequency at which high-res model peaks
         FLT maxVal = -1e9;
         FLT maxX = 0;
 //this is cludged in order to avoid the zero frequency peak.
-        for(int i=3;i<nsamp;i++){
-            if(ys[i]>maxVal){
-                maxVal = ys[i];
-                maxX = xs[i];
+        for(int i=1;i<nsamp;i++){
+            if(this->ys[i]>maxVal){
+                maxVal = this->ys[i];
+                maxX = this->xs[i];
             }
         }
-*/
 
-
+/*
         // get frequency at which high-res model peaks
         float maxVal = -1e9;
         float maxX = 0;
-        for(int i=1;i<nsamp;i++){
-            //std::cout << "yfit " << i << " is " << yfit[i] << " xfit " << xfit[i] << std::endl;
+        for(int i=0;i<nsamp;i++){
+            std::cout << "yfit " << i << " is " << yfit[i] << " xfit " << xfit[i] << std::endl;
             if(yfit[i]>maxVal){
                 maxVal = yfit[i];
                 maxX = xfit[i];
             }
         }
-
+*/
 
         // return coeffs in standard vector
         std::vector<float> coeffs(cf.size());

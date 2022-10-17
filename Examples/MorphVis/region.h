@@ -2641,11 +2641,10 @@ FLT regnnfrac (int regNum) {
      * using the methods in region.h where the h.vi refer to the global positions of the hexes and are unique
      * and the use from main programs that use ksSolver for each region
      */
-    vector <FLT> sectorize_reg_radius (int regNum, int _numSectors, int beginAngle, int endAngle, vector<FLT> fieldVal) {
+    vector <FLT> sectorize_reg_radius (int regNum, int numSectors, int beginAngle, int endAngle, vector<FLT> fieldVal) {
         ofstream dfile (logpath + "/sectorRadius.txt",ios::app);
-        int numSectors = _numSectors/2;
+        ofstream efile (logpath + "/sectorRadius.data",ios::app);
         vector <FLT>  radiusNN;
-        vector <FLT> normalNN;
         vector <int> radiusCount;
         radiusCount.resize(numSectors,0);
         radiusNN.resize(numSectors,0);
@@ -2658,15 +2657,6 @@ FLT regnnfrac (int regNum) {
         angleInc = 2*PI/(1.*numSectors);
         startAngle = (beginAngle)*angleInc;
         finishAngle = (endAngle)*angleInc;
- //int size = (int) this->regionHex[regNum].size();
- // to normalise the NN field
-        FLT field = 0;
-        for (unsigned int i=0; i<fieldVal.size(); i++){
-            normalNN.push_back(fabs(fieldVal[i]));
-        }
-        dfile << "after normalise field "<< field << endl;
-//for (int i=0;i<size;i++)
-// dfile << " i " << i << " normalNN[i] " << normalNN[i] << endl;
 
         for (int k=0;k<numSectors;k++) {
             startradius = (k*radiusInc);
@@ -2676,18 +2666,30 @@ FLT regnnfrac (int regNum) {
                 if (h.phi >= startAngle && h.phi < finishAngle) {
                     if (h.r >= startradius && h.r <  finishradius) {
                         radiusCount[k]++;
-                        radiusNN[k] += normalNN[count];
+                        radiusNN[k] += fieldVal[count];
                     } //end of if on radius
                 } //end of if on angleSector
                 count++;
             } //end of loop over the hexes in the region
-        if (radiusCount[k] == 0)
-            radiusNN[k] = 0.0;
-        else
-            radiusNN[k] = radiusNN[k]/radiusCount[k];
-        dfile << " region " << regNum << " startradius "<<startradius<<"  finishradius "<<finishradius<< " radiusNN " << radiusNN[k] << endl;
+        }
 
-        }//end loop over regions
+        dfile << "after creation of sectorized field  " <<  endl;
+        FLT maxradiusNN = -999.99;
+        for (int k=0; k<numSectors; k++) {
+            radiusNN[k]  = radiusNN[k]  / (1.*radiusCount[k]);
+            if (fabs(radiusNN[k]) > maxradiusNN) {
+               maxradiusNN = fabs(radiusNN[k]);
+            }
+        }
+        dfile << "maxradiusNN " << maxradiusNN << std::endl;
+
+        for (int k=0;k<numSectors;k++){
+            startradius = (k*radiusInc);
+            finishradius = (k+1)*radiusInc;
+            dfile << " startradius "<<startradius<<"  finishradius "<<finishradius<< " radiusNN " << radiusNN[k] << " radiusCount " << radiusCount[k] << endl;
+            radiusNN[k]  = radiusNN[k]  / (1.* maxradiusNN);
+            efile << radiusNN[k] << std::endl;
+        }//end loop over sectors
 
         dfile << endl;
         return radiusNN;
@@ -2699,9 +2701,9 @@ FLT regnnfrac (int regNum) {
      * using the methods in region.h where the h.vi refer to the global positions of the hexes and are unique
      * and the use from main programs that use ksSolver for each region
      */
-    vector <int> sectorize_reg_Dradius (int regNum, int _numSectors, int beginAngle, int endAngle, vector<FLT> fieldVal) {
+    vector <int> sectorize_reg_Dradius (int regNum, int numSectors, int beginAngle, int endAngle, vector<FLT> fieldVal) {
        ofstream dfile ( logpath + "/sectorRadius.txt",ios::app);
-       int numSectors = _numSectors/2;
+       //int numSectors = _numSectors/2;
        vector <int>  radiusNN;
        radiusNN.resize(numSectors,0);
        vector <int> radiusCount;
@@ -2734,7 +2736,6 @@ FLT regnnfrac (int regNum) {
             if (h.phi >= startAngle && h.phi < finishAngle) {
                 if (h.r >= startradius && h.r < finishradius) {
                     radiusCount[k]++;
-//radiuscc[k] += this->cc[this->regionHex[regNum][i]];
                    radiusHold[k] += normalNN[count];
                 } //end of if on radius
             } //end of if on angleSector
@@ -2776,8 +2777,8 @@ FLT regnnfrac (int regNum) {
     vector <FLT> sectorize_reg_angle (int regNum, int numSectors, int beginradius, int endradius, vector<FLT> fieldVal) {
     //std::pair<FLT,FLT> diff; //difference between seed point and CoG of region
         ofstream cfile (logpath + "/sectorAngle.txt",ios::app);
+        ofstream efile (logpath + "/sectorAngle.data",ios::app);
         vector <FLT> angleNN; //average value of cc in each sector
-        vector <FLT> normalNN;
         vector <int> angleCount; //number of hexes in each sector
         angleNN.resize(numSectors,0);
         angleCount.resize(numSectors,0);
@@ -2790,52 +2791,46 @@ FLT regnnfrac (int regNum) {
         finishradius = endradius*radiusInc;
         angleInc = 2*PI/(1.*numSectors);
        cfile << "region " << regNum << " maxradius used " << maxradius << " minradius used " << minradius <<endl;
-// to normalise the NN field
-//int size = (int) this->regionHex[regNum].size();
-        for (unsigned int i=0; i<fieldVal.size(); i++){
-            normalNN.push_back(fieldVal[i]);
-        }
-        /*
-        for (auto h : this->regionHex[regNum]){
-            normalNN.push_back(fieldVal[h.vi]);
-        }
-        */
-        normalNN = meanzero_vector(normalNN);
-//for (int i=0;i<size;i++)
-//   cfile << " i " << i << " normalNN[i] " << normalNN[i] << endl;
 
         for (int k=0;k<numSectors;k++) {
             startAngle = k*angleInc;
             endAngle = (k+1)*angleInc;
             if ((k+1) == numSectors)
                endAngle = 2*PI;
-
             int count = 0;
             for (auto h : this->regionHex[regNum]) {
                 if ( h.r  >= startradius && h.r < finishradius) {
                     if (h.phi >= startAngle && h.phi < endAngle) {
                         angleCount[k]++;
-//angle[k] += this->[this->regionHex[regNum][i]];
-                        angleNN[k] += normalNN[count];
+                        angleNN[k] += fieldVal[count];
                     }//end if on angle
-//cfile << setw(5) << angleVal[i]  <<"  ";
                 }//end if on radius
                 count++;
             }//end loop over all hexes in a region
+            cfile << "after creation of sectorized field region angle " << regNum << " number of hexes " << count <<  endl;
         }//end loop on all sectors
-        //cfile << "after creation of sectorized field region angle " << regNum << " number of hexes " << count <<  endl;
 
-        angleNN = meanzero_vector(angleNN);
         for (int k=0;k<numSectors;k++){ //calculate the average angle in the sector
             startAngle = k*angleInc;
-            endAngle = k*angleInc;
-            if (angleCount[k] != 0)
-                angleNN[k] = angleNN[k]/(1.*angleCount[k]);
-            else
-                angleNN[k] = -999.999;
+            endAngle = (k+1)*angleInc;
+            if ((k+1) == numSectors)
+               endAngle = 2*PI;
+            angleNN[k] = angleNN[k]/(1.*angleCount[k]);
 //write out values
             cfile << " region " << regNum <<" startAngle "<< startAngle << "  endAngle "<< endAngle << " angleNN " << angleNN[k] << endl;
         }//end loop on sectors
+
+        FLT maxangleNN = -999.99;
+        for (int k=0; k<numSectors; k++) {
+            if (fabs(angleNN[k]) > maxangleNN) {
+                maxangleNN = fabs(angleNN[k]);
+            }
+        }
+        cfile << "maxangleNN " << maxangleNN << std::endl;
+        for (int k=0; k<numSectors; k++) {
+            angleNN[k] = angleNN[k] /  maxangleNN;
+            efile << angleNN[k] << std::endl;
+        }//end over all sectors
 
         cfile << endl;
         return angleNN;

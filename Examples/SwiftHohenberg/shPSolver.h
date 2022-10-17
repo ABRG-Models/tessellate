@@ -10,7 +10,6 @@
  */
 #include <morph/tools.h>
 #include <morph/ReadCurves.h>
-#include <morph/HdfData.h>
 #include <morph/BezCurve.h>
 #include <morph/BezCurvePath.h>
 #include <morph/BezCoord.h>
@@ -32,9 +31,8 @@
 #ifndef PI
 #define PI 3.1415926535897932f
 #endif
-using morph::HexGrid;
-using morph::HdfData;
 using morph::ReadCurves;
+using morph::HexGrid;
 using morph::Tools;
 using morph::BezCurve;
 using morph::BezCurvePath;
@@ -119,13 +117,14 @@ public:
     }; // end of shSolver constructor
 
 // constructor with radius passed in for solving on radial boundaries
-    shSolver (int scale, FLT xspan, string logpath, float radius, pair<float, float> seedPoint, FLT lengthScale, FLT axisRatio=1.0f, bool lCircle=true) {
+    shSolver (int scale, FLT xspan, string logpath, float radius, pair<float, float> seedPoint, FLT lengthScale, FLT sigma = 0.3f, FLT axisRatio=1.0f, bool lCircle=true) {
         this->scale = scale;
         this->xspan = xspan;
         this->logpath = logpath;
         this->bound = bound;
         this->seedPoint = seedPoint;
         this->lengthScale = lengthScale;
+        this->sigma = sigma;
         ofstream afile (this->logpath + "/ksdebug.out",ios::app );
         FLT s = pow(2.0, this->scale-1);
         this->ds = 1.0/s;
@@ -155,10 +154,9 @@ public:
         this->nonLocalR.resize(this->n, 0.0);
         this->nonLocalC.resize(this->n, 0.0);
         //now set up kernel
-        this->sigma = 0.26; //based on freqency estimates of wavelength from simulations
-        this->gNorm = 1.0 /(2.0*PI*sigma*sigma);
-        this->kernel = new morph::HexGrid(this->ds, 10.0*sigma, 0, morph::HexDomainShape::Boundary);
-        this->kernel->setCircularBoundary(3.0*sigma);
+        this->gNorm = 1.0 /(2.0*PI*this->sigma*this->sigma);
+        this->kernel = new morph::HexGrid(this->ds, 10.0*this->sigma, 0, morph::HexDomainShape::Boundary);
+        this->kernel->setCircularBoundary(3.0*this->sigma);
         this->kernelRdata.resize(this->kernel->num(),0.0);
         this->kernelCdata.resize(this->kernel->num());
         this->psi.resize(n);
@@ -167,13 +165,14 @@ public:
     }; // end of shSolver constructor
 
 // Constructor with boundary passed in
-    shSolver (int scale, FLT xspan, string logpath, BezCurvePath<float> bound, pair<FLT,FLT> seedPoint, FLT lengthScale) {
+    shSolver (int scale, FLT xspan, string logpath, BezCurvePath<float> bound, pair<FLT,FLT> seedPoint, FLT lengthScale, FLT sigma = 0.3f) {
         this->scale = scale;
         this->xspan = xspan;
         this->logpath = logpath;
         this->bound = bound;
         this->seedPoint = seedPoint;
         this->lengthScale = lengthScale;
+        this->sigma = sigma;
         ofstream afile (this->logpath + "/ksdebug.out",ios::app );
         FLT s = pow(2.0, this->scale-1);
         this->ds = 1.0/s;
@@ -199,10 +198,9 @@ public:
         this->nonLocalR.resize(this->n, 0.0);
         this->nonLocalC.resize(this->n, 0.0);
         //now set up kernel
-        this->sigma = this->xspan / 37.5;
-        this->gNorm = 1.0 /(2.0*PI*sigma*sigma);
-        this->kernel = new morph::HexGrid(this->ds, 10.0*sigma, 0, morph::HexDomainShape::Boundary);
-        this->kernel->setCircularBoundary(3.0*sigma);
+        this->gNorm = 1.0 /(2.0*PI*this->sigma*this->sigma);
+        this->kernel = new morph::HexGrid(this->ds, 10.0*this->sigma, 0, morph::HexDomainShape::Boundary);
+        this->kernel->setCircularBoundary(3.0*this->sigma);
         this->kernelRdata.resize(this->kernel->num(),0.0);
         this->kernelCdata.resize(this->kernel->num());
         this->phi.resize(n);
@@ -210,13 +208,14 @@ public:
     }; // end of shSolver constructor
 
 // Constructor for parallelogram domain
-    shSolver (int scale, FLT xspan, string logpath, FLT lengthScale) {
+    shSolver (int scale, FLT xspan, string logpath, FLT lengthScale, FLT sigma, bool lPeriodic=true) {
         this->scale = scale;
         this->xspan = xspan;
         this->logpath = logpath;
         this->bound = bound;
         this->seedPoint = seedPoint;
         this->lengthScale = lengthScale;
+        this->sigma = sigma;
         FLT pspan = xspan/3.0;
         ofstream afile (this->logpath + "/ksdebug.out",ios::app );
         FLT s = pow(2.0, this->scale-1);
@@ -241,13 +240,19 @@ public:
         this->nonLocalR.resize(this->n, 0.0);
         this->nonLocalC.resize(this->n, 0.0);
         this->IsoORcontours.resize(2,std::vector<FLT>(this->n,0.));
-        //this->setNoFlux();
-        this->setPeriodic();
+        N.resize(n);
+        //set boundary conditions
+        if (lPeriodic == true) {
+            this->setPeriodic();
+        }
+        else {
+            this->setNoFlux();
+        }
+
         //now set up kernel
-        this->sigma = 0.142857;
-        this->gNorm = 1.0 /(2.0*PI*sigma*sigma);
-        this->kernel = new morph::HexGrid(this->ds, 6.0*sigma, 0, morph::HexDomainShape::Boundary);
-        this->kernel->setCircularBoundary(2.0*sigma);
+        this->gNorm = 1.0 /(2.0*PI*this->sigma*this->sigma);
+        this->kernel = new morph::HexGrid(this->ds, 6.0*this->sigma, 0, morph::HexDomainShape::Boundary);
+        this->kernel->setCircularBoundary(2.0*this->sigma);
         this->kernelRdata.resize(this->kernel->num(),0.0);
         this->kernelCdata.resize(this->kernel->num());
         afile << "after psi.resize()" << endl;
@@ -257,13 +262,14 @@ public:
 
 
 // Constructor for rectangular domain
-    shSolver (int scale, FLT xspan, string logpath, FLT x, FLT y, FLT lengthScale) {
+    shSolver (int scale, FLT xspan, string logpath, FLT x, FLT y, FLT lengthScale, FLT sigma = 0.3f) {
         this->scale = scale;
         this->xspan = xspan;
         this->logpath = logpath;
         this->bound = bound;
         this->seedPoint = seedPoint;
         this->lengthScale = lengthScale;
+        this->sigma = sigma;
         FLT s = pow(2.0, this->scale-1);
         this->ds = 1.0/s;
         this->overds = 1.0/(this->lengthScale*this->lengthScale*ds*ds);
@@ -288,10 +294,9 @@ public:
         this->nonLocalR.resize(this->n, 0.0);
         this->nonLocalC.resize(this->n, 0.0);
         //now set up kernel
-        this->sigma = x / 12.0;
-        this->gNorm = 1.0 /(2.0*PI*sigma*sigma);
-        this->kernel = new morph::HexGrid(this->ds, 6.0*sigma, 0, morph::HexDomainShape::Boundary);
-        this->kernel->setCircularBoundary(2.0f*sigma);
+        this->gNorm = 1.0 /(2.0*PI*this->sigma*this->sigma);
+        this->kernel = new morph::HexGrid(this->ds, 6.0*this->sigma, 0, morph::HexDomainShape::Boundary);
+        this->kernel->setCircularBoundary(2.0f*this->sigma);
         this->kernelRdata.resize(this->kernel->num(),0.0);
         this->kernelCdata.resize(this->kernel->num());
         std::cout << " end of shSolver rectangular " << std::endl;
@@ -301,8 +306,8 @@ public:
 
     void setKernelRdata() {
     // Once-only parts of the calculation of the Gaussian.
-        FLT one_over_sigma_root_2_pi = 1 / sigma * 2.506628275;
-        FLT two_sigma_sq = 2.0f * sigma * sigma;
+        FLT one_over_sigma_root_2_pi = 1 / this->sigma * 2.506628275;
+        FLT two_sigma_sq = 2.0f * this->sigma * this->sigma;
         // Gaussian dist. result, and a running sum of the results:
         FLT gauss = 0;
         FLT sum = 0;
@@ -320,8 +325,8 @@ public:
 
     void setKernelCdata() {
     // Once-only parts of the calculation of the Gaussian.
-        FLT one_over_sigma_root_2_pi = 1 / sigma * 2.506628275;
-        FLT two_sigma_sq = 2.0f * sigma * sigma;
+        FLT one_over_sigma_root_2_pi = 1 / this->sigma * 2.506628275;
+        FLT two_sigma_sq = 2.0f * this->sigma * this->sigma;
         // Gaussian dist. result, and a running sum of the results:
         FLT gauss = 0;
         FLT sum = 0;
@@ -472,7 +477,7 @@ public:
             if (A[di]) {
                 FLT X = this->Hgrid->d_x[di];
                 FLT Y = this->Hgrid->d_y[di];
-                morph::Vector<FLT,3> pW = {0,0,0.002};
+                morph::Vector<FLT,3> pW = {0.0, 0.0,  0.0};
                 pW[0] = X;
                 pW[1] = Y;
                 result.push_back(pW);
@@ -1027,6 +1032,7 @@ public:
         FLT minVal = 100000.0;
         for (auto h : this->Hgrid->hexen) {
             if (f[h.vi] < minVal) minVal = f[h.vi];
+            //std::cout << "f[h.vi] " << f[h.vi] << " " << f[h.ne->vi] << " " << f[h.nne->vi] << " " << f[h.nnw->vi] << " " << f[h.nw->vi] << " " << f[h.nsw->vi] << " " << f[h.nse->vi] << std::endl;
             if (h.onBoundary() == false) {
                 if (f[h.vi] >= threshold) {
                     if ((h.has_ne() && f[h.ne->vi] < threshold)
@@ -1037,12 +1043,13 @@ public:
                         || (h.has_nse() && f[h.nse->vi] < threshold) ) {
                         result[h.vi] = true;
                         count++;
+                        //std::cout << "count " << count << " h.vi " << h.vi << std::endl;
                     }
                 }
             }
         }
-        std::cout << "in isContourZero minVal " << minVal << std::endl;
-        std::cout << "in isContourZero number of hexes on the contour " << count << std::endl;
+        std::cout << "in isContourZeroSpiral minVal " << minVal << std::endl;
+        std::cout << "in isContourZeroSpiral number of hexes on the contour " << count << std::endl;
         return result;
     }
 
@@ -1065,12 +1072,14 @@ public:
                 }
             }
         }
-        std::cout << "in isContourZero minVal " << minVal << std::endl;
-        std::cout << "in isContourZero number of hexes on the contour " << count << std::endl;
+        std::cout << "in isContourZeroPeriodic minVal " << minVal << std::endl;
+        std::cout << "in isContourZeroPeriodic number of hexes on the contour " << count << std::endl;
         return result;
     }
 
-    std::vector<bool> intersectRealImag(std::vector<bool> realZero, std::vector<bool> imagZero) {
+// counts all intersections removing spurious ones, this version for periodic boundary conditions
+// intersection values definded for neighbours of all hexes on the HexGrid including boundary hexes
+    std::vector<bool> intersectPeriodic(std::vector<bool> realZero, std::vector<bool> imagZero) {
         std::vector<bool> intersects;
         intersects.resize(this->n,false);
         //intersects becomes true if intersection of zero real and imaginary contours
@@ -1079,22 +1088,66 @@ public:
                 intersects[h.vi] = true;
             }
         }
+        cout << "after intersects " << endl;
 
         // neighbouring intersects for removal (these are fractures)
         int countSpurious = 0;
         std::vector<bool> remSelf;
-        remSelf.resize(intersects.size(),false);
+        remSelf.resize(this->n,false);
+        cout << "after sizing resSelf " << remSelf.size() << endl;
         for(int i=0; i<this->n; i++){
             if(intersects[this->Hgrid->d_ne[i]]  == true ||
             intersects[this->Hgrid->d_nne[i]] == true ||
             intersects[this->Hgrid->d_nnw[i]] == true ||
             intersects[this->Hgrid->d_nw[i]]  == true ||
             intersects[this->Hgrid->d_nsw[i]] == true ||
-            intersects[this->Hgrid->d_nse[i]] == 1){
+            intersects[this->Hgrid->d_nse[i]] == true){
                 countSpurious++;
                 remSelf[i] = true;
             }
         }
+        cout << "after spurious intersects" << endl;
+        //remove all intersects along fractures
+        for (int i=0; i<this->n; i++) {
+            if (intersects[i] && remSelf[i]) {
+                intersects[i] = false;
+            }
+        }
+        std::cout<<"Spurious crossings removed : "<<countSpurious<<std::endl;
+        return intersects;
+    }
+
+// counts all intersections removing spurious ones, this version for noFlux boundary conditions
+// intersection values not definded for neighbours of boundary hexes
+    std::vector<bool> intersectNoFlux(std::vector<bool> realZero, std::vector<bool> imagZero) {
+        std::vector<bool> intersects;
+        intersects.resize(this->n,false);
+        //intersects becomes true if intersection of zero real and imaginary contours
+        for(auto h : this->Hgrid->hexen){
+            if ((realZero[h.vi] == true)  && (imagZero[h.vi] == true) && (!h.boundaryHex())) {
+                intersects[h.vi] = true;
+            }
+        }
+        cout << "after intersects " << endl;
+
+        // neighbouring intersects for removal (these are fractures)
+        int countSpurious = 0;
+        std::vector<bool> remSelf;
+        remSelf.resize(this->n,false);
+        cout << "after sizing resSelf " << remSelf.size() << endl;
+        for(auto h : this->Hgrid->hexen){
+            if (!h.boundaryHex())
+                if(intersects[this->Hgrid->d_ne[h.vi]]  == true ||
+                intersects[this->Hgrid->d_nne[h.vi]] == true ||
+                intersects[this->Hgrid->d_nnw[h.vi]] == true ||
+                intersects[this->Hgrid->d_nw[h.vi]]  == true ||
+                intersects[this->Hgrid->d_nsw[h.vi]] == true ||
+                intersects[this->Hgrid->d_nse[h.vi]] == true){
+                    countSpurious++;
+                    remSelf[h.vi] = true;
+            }
+        }
+        cout << "after spurious intersects" << endl;
         //remove all intersects along fractures
         for (int i=0; i<this->n; i++) {
             if (intersects[i] && remSelf[i]) {

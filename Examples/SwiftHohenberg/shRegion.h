@@ -148,6 +148,7 @@ public:
   */
     DRegion (int scale, FLT xspan, string basepath, int npoints) {
         this->NUMPOINTS = npoints;
+        std::cout << "in DRegion numpoints " << NUMPOINTS << std::endl;
         this->scale = scale;
         this->logpath = basepath;
         this->xspan = xspan;

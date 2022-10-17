@@ -43,67 +43,6 @@ using std::runtime_error;
 using namespace morph;
 using namespace std;
 
-#ifdef COMPILE_PLOTTING
-class vtxVisual : public morph::VisualModel
-{
-public:
-    // class data
-    std::vector<std::vector<morph::Vector<FLT,3>>> vtx;
-    unsigned int size;
-    FLT linewidth = 0.00390625;
-    FLT radiusFixed = 0.00390625;
-    VBOint idx = 0;
-    morph::Vector<FLT,3> uz = {1.0f, 1.0f, 1.0f};
-    // class constructors
-    vtxVisual(GLuint sp, GLuint tsp, std::vector<std::vector<morph::Vector<FLT, 3>>> & _vtx, FLT line, FLT radius)
-    {
-        this->shaderprog = sp;
-        this->tshaderprog = tsp;
-        this->vtx = _vtx;
-        this->size = _vtx.size();
-        this->linewidth = line;
-        this->radiusFixed = radius;
-    }
-    //class methods
-    void initializeVertices() {
-        this->initv();
-        cout << " in initializeVertices after call to initv " << endl;
-    }
-
-    // Draw vertices for the net's actual locations
-    void initv() {
-    // Discs at the net vertices
-        cout << "entering intitv " << endl;
-        morph::Vector<FLT,3> puckthick = { 0, 0, 0.002 };
-        morph::Vector<FLT,3> linethick = {0, 0, 0.001};
-        morph::Vector<FLT,3> colStart = {0.0, 0.0, 0.0};
-        morph::Vector<FLT,3> colEnd = {0.0, 0.0, 0.0};
-        for (unsigned int j=0; j < this->size; ++j) {
-            unsigned int jsize = vtx[j].size();
-            for (unsigned int i=0; i < jsize; i++) {
-                cout << " initv vtx " << " i " << i << " j " << j << " is " << vtx[j][i] << endl;
-                this->computeTube (this->idx,
-                      this->vtx[j][i]+puckthick,
-                      this->vtx[j][i]-puckthick,
-                      morph::Vector<FLT,3>({1,0,0}), morph::Vector<FLT,3>({0,1,0}),
-                      colStart, colEnd,
-                      radiusFixed, 16);
-            }
-            cout << "after inner loop for computeTube " << endl;
-        }
-        cout << "after connect tube" << endl;
-        // Connection lines
-        for (unsigned int j=0; j < size; j++) {
-            unsigned int jsize = vtx[j].size();
-            for (unsigned int i=0; i < jsize; i++) {
-                morph::Vector<FLT, 3> c1 = this->vtx[j][i] + linethick;
-                morph::Vector<FLT, 3> c2 = this->vtx[j][(i+1)%jsize] + linethick;
-                this->computeLine (idx, c1, c2, this->uz, colStart, colEnd, linewidth, linewidth/4);
-            }
-        }
-    }
-}; //end of class vtxVisual
-#endif
 
 int main (int argc, char **argv)
 {
@@ -130,7 +69,7 @@ int main (int argc, char **argv)
         float ccInitialOffset = conf.getFloat("ccInitialOffset",2.5);
         float exponent = conf.getFloat("exponent", -100.0f);
         float radMix = conf.getFloat("radMix", 1.0f);
-        float lengthScale = conf.getFloat("lengthScale",29.0);
+        float lengthScale = conf.getFloat("lengthScale",25.0);
 #else
         double dt = conf.getDouble("dt",0.0001);
         double Dn = conf.getDouble("Dn",1.0);
@@ -141,11 +80,11 @@ int main (int argc, char **argv)
         double aNoiseGain = conf.getDouble("aNoiseGain",0.1);
         double nnInitialOffset = conf.getDouble("nnInitialOffset", 0.0);
         double ccInitialOffset = conf.getDouble("ccInitialOffset",2.5);
-        double lengthScale = ("lengthScale", 29.0);
+        double lengthScale = ("lengthScale", 25.0);
         double exponent = conf.getDouble("exponent", -100.0);
         double radMix = conf.getDouble("radMix", 1.0);
 #endif
-    int numSectors = conf.getInt("numsectors",12);
+    int numSectors = conf.getInt("numSectors",12);
     int scale = conf.getInt("scale",8);
     int numsteps = conf.getInt("numsteps",100);
     int numprint = conf.getInt("numprint",100);
@@ -159,7 +98,9 @@ int main (int argc, char **argv)
     unsigned int numpoints = conf.getInt("numpoints",41);
     unsigned int fov = conf.getInt("fov", 10);
     cout << " Lcontinue " << Lcontinue << " skipMorph " << skipMorph << endl;
-    ofstream afile (logpath + "/centroids.out",ios::app);
+    ofstream degfile (logpath + "/degree.data", ios::app);
+    // this is important, correct dynamic timestep
+    dt = dt / floor(Dn);
     // adjust the number of steps according to the Dn number
     //numsteps = numsteps * floor(sqrt(36.0/Dn));
     //numprint  = numprint * floor(sqrt(36.0/Dn));
@@ -168,6 +109,7 @@ int main (int argc, char **argv)
 
     std::cout << "LfixedSeed = " << LfixedSeed << std::endl;
     std::cout << "nnInitial " << nnInitialOffset << " ccInitial " << ccInitialOffset << std::endl;
+    std::cout << "lengthScale = " << lengthScale << " dt " << dt << std::endl;
     unsigned int seed;
     chrono::milliseconds ms1 = duration_cast<milliseconds>(system_clock::now().time_since_epoch());
     if (LfixedSeed)
@@ -178,11 +120,7 @@ int main (int argc, char **argv)
 
     // A ra2yyndo2yym uniform generator returning real/FLTing point types
     morph::RandUniform<FLT> ruf(seed);
-    ofstream gfile ( logpath + "/edges.out");
-    ofstream jfile ( logpath + "/results.txt");
-    ofstream degfile1 (logpath + "/degree1.data");
-    ofstream degfile2 (logpath + "/degree2.data");
-    ofstream degfile3 (logpath + "/degree3.data");
+    ofstream gfile ( logpath + "/NNav.data");
 
 // include the analysis methods
     Analysis L;
@@ -228,8 +166,8 @@ int main (int argc, char **argv)
 	    }
 	    else
 	    {
-                S.NN[h.vi] = ruf.get() * aNoiseGain  - nnInitialOffset;
-                S.CC[h.vi] = ruf.get() * aNoiseGain  - ccInitialOffset;
+                S.NN[h.vi] = ruf.get() * aNoiseGain  + nnInitialOffset;
+                S.CC[h.vi] = ruf.get() * aNoiseGain  + ccInitialOffset;
 	    } //end of if on +-
             FLT bSig = 1.0 / ( 1.0 + exp (-10000.0*(h.distToBoundary- boundaryFalloffDist)) );
             if (h.boundaryHex()) {
@@ -238,8 +176,10 @@ int main (int argc, char **argv)
 
             if (lBoundZero) {
                 if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
-                    S.NN[h.vi] = S.NN[h.vi] * bSig;
-                    S.CC[h.vi] = S.CC[h.vi] * bSig;
+                    //S.NN[h.vi] = S.NN[h.vi] * bSig;
+                    //S.CC[h.vi] = S.CC[h.vi] * bSig;
+                    S.NN[h.vi] = (S.NN[h.vi] - nnInitialOffset) * bSig + nnInitialOffset;
+                    S.CC[h.vi] = (S.CC[h.vi] - ccInitialOffset) * bSig + ccInitialOffset;
                 }
             }
             /*
@@ -257,7 +197,7 @@ int main (int argc, char **argv)
  #ifdef COMPILE_PLOTTING
 // now draw the intial tesselation
     // Parameters from the config that apply only to plotting:
-    const unsigned int plotEvery = conf.getUInt ("plotevery", 10);
+    const unsigned int plotEvery = conf.getUInt ("plotEvery", 10);
     // Should the plots be saved as png images?
     const bool saveplots = conf.getBool ("saveplots", true);
     // If true, then write out the logs in consecutive order numbers,
@@ -396,8 +336,8 @@ int main (int argc, char **argv)
             hgv2->clearAutoscaleColour();
             hgv3->updateData (&S.CC);
             hgv3->clearAutoscaleColour();
-            //hgv1->clearAutoscaleColour();
             std::cout << std::setprecision(16) << " NNAverage " << S.sum_NN << " lapNNAverage " << S.sum_lapNN << " time step " << i << " plotevery " << plotEvery << std::endl;
+            gfile << std::setprecision(16) << S.sum_NN << std::endl;
             vidframes = true;
             if (i % plotEvery == 0) {
                 if (vidframes) {
@@ -422,6 +362,25 @@ int main (int argc, char **argv)
   //  v1->keepOpen();
 #endif
     //code run at end of timestepping
+    //declaration of variables needed for analysis
+    vector <FLT> angleVector;
+    vector <FLT> radiusVector;
+    int degreeRadius;
+    int degreeAngle;
+    int angleOffset = 0;
+    int radiusOffset = (10 * numSectors) / 12; //what fraction of the radius do we start from?
+    FLT DegreeRadius = 0.0;
+    std::cout << "just before sectorize reg" << std::endl;
+    angleVector = S.sectorize_Circle_angle(numSectors,radiusOffset, numSectors, S.NN);
+    std::cout << "just before zeroangle" << std::endl;
+    degreeAngle = L.find_extrema_angle(angleVector);
+    std::cout << "just before sectorize radius" << std::endl;
+    //radial degree
+    degreeRadius = 0;
+    radiusVector = S.sectorize_Circle_radius(numSectors/2, angleOffset, angleOffset + numSectors, S.NN);
+    std::cout << "just before zeroradius morph0" << std::endl;
+    degreeRadius = L.find_extrema_radius(radiusVector);
+    degfile << degreeAngle/2 << " " << degreeRadius + 1<< " " <<endl<<flush;
     //first save the  ofstream outFile;
     cout << "just before first data write morph 0" << endl;
     morph::HdfData fdata(fname);
