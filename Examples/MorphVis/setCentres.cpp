@@ -19,8 +19,6 @@
 #include <cctype>
 // #include <boost/math/special_functions/bessel.hpp>
 #define PI 3.1415926535897932
-#define NUMPOINTS 41 //just the A-E rows.
-//#define NUMPOINTS 79 //just the A-E rows.
 
 using std::vector;
 using std::array;
@@ -57,10 +55,9 @@ mix (unsigned int a, unsigned int b, unsigned int c)
 int main (int argc, char **argv)
 {
     vector <pair <float, float>> centres; //seed points for regions
-    centres.resize(NUMPOINTS);
     std::string num;
     unsigned int off;
-    if (argc > 2) {
+    if (argc > 3) {
     	off = atoi(argv[2]);
     }
     else {
@@ -71,7 +68,10 @@ int main (int argc, char **argv)
     double maxX = stod(argv[1]);
     double minX = -maxX;
     double maxY = maxX;
-	double minY = -maxY;
+    double minY = -maxY;
+    int numpoints = stoi(argv[2]);
+    centres.resize(numpoints);
+
 
     ofstream afile ( "./centres.h");
     ofstream bfile ( "./centres.inp");
@@ -81,7 +81,7 @@ int main (int argc, char **argv)
    unsigned int seed = mix(clock(), time(NULL), getpid());
    cout << "seed " << seed << endl;
 
-    cout << "numpoints " << NUMPOINTS << " maxX " << maxX << " minX " << minX << " maxY " << maxY << " minY " << minY << endl;
+    cout << "numpoints " << numpoints << " maxX " << maxX << " minX " << minX << " maxY " << maxY << " minY " << minY << endl;
     // A rando2yym uniform generator returning real/floating point types
     morph::RandUniform<double> ruf(seed);
     cout << "Random float number is " << ruf.get() << endl;
@@ -89,7 +89,7 @@ int main (int argc, char **argv)
     cout << "That float RNG has min and max: " << ruf.min() << "/" << ruf.max() << endl;
 
     int count = 0;
-    while (count < NUMPOINTS) {
+    while (count < numpoints) {
        double choice = ruf.get();
        if ((0 < choice) && (choice <= 0.25)) {
            double x = ruf.get() * maxX;
@@ -140,7 +140,7 @@ int main (int argc, char **argv)
 
     std::sort(centres.begin(),centres.end());
 
-    for (int i=0; i < NUMPOINTS; i++) {
+    for (int i=0; i < numpoints; i++) {
 	  string sindex = to_string(i);
 	  string centres1 = " centres[" + sindex + "].first = ";
 	  string  centres2 = " centres[" + sindex + "].second = ";

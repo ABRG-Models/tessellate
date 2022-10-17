@@ -85,7 +85,6 @@ public:
     vector<FLT> CT;
     vector<FLT> lapCC;
     vector<FLT> boundaryFade;
-    vector<FLT> centralSignal;
 // empty constructor
     ksSolver(){};
 // constructor with HexGrid passed in
@@ -114,7 +113,6 @@ public:
         this->NN.resize(n);
         this->CC.resize(n);
         this->boundaryFade.resize(n);
-        this->centralSignal.resize(n,0.0);
         afile << "after alloc NN and CC" <<endl;
         pair<FLT, FLT> centroid = set_kS_polars(this->seedPoint);
         cout << " end of ksSolver from file " << " x seedPoint " << seedPoint.first << " y seedPoint " << seedPoint.second << endl;
@@ -151,7 +149,6 @@ public:
         this->NN.resize(n);
         this->CC.resize(n);
         this->boundaryFade.resize(n);
-        this->centralSignal.resize(n,0.0);
         afile << "after alloc NN and CC" <<endl;
         pair<FLT, FLT> centroid = set_kS_polars(this->seedPoint);
         cout << " end of ksSolver circle radius " << " x seedPoint " << seedPoint.first << " y seedPoint " << seedPoint.second << endl;
@@ -189,7 +186,6 @@ public:
         this->NN.resize(n);
         this->CC.resize(n);
         this->boundaryFade.resize(n);
-        this->centralSignal.resize(n,0.0);
         afile << "after alloc NN and CC" <<endl;
         pair<FLT, FLT> centroid = set_kS_polars(this->seedPoint);
         cout << " end of ksSolver bezCurvePath " << " x seedPoint " << seedPoint.first << " y seedPoint " << seedPoint.second << endl;
@@ -293,12 +289,12 @@ public:
 
   // function to compute the derivative
     void compute_dNNdt(vector<FLT>& inN, vector<FLT>& dNdt, FLT Dn, FLT Dchi) {
+        //vector<FLT> cTaxis(this->n,0);
         this->lapNN = getLaplacian(inN,this->ds);
         this->CT = chemoTaxis(inN,this->CC,this->ds);
-        FLT a = 1.0, b = 1.0;
+        FLT a = 1., b = 1.;
         for (auto h : Hgrid->hexen) {
-            dNdt[h.vi] = a-b*inN[h.vi] + Dn*this->lapNN[h.vi] - Dchi*this->CT[h.vi] + centralSignal[h.vi]*this->CC[h.vi];
-            //dNdt[h.vi] = a-b*inN[h.vi] + Dn*this->lapNN[h.vi] - Dchi*this->CT[h.vi];
+            dNdt[h.vi] = a-b*inN[h.vi] + Dn*this->lapNN[h.vi] - Dchi*this->CT[h.vi];
         }
     } //end of method compute_dNNdt
 
@@ -323,7 +319,7 @@ public:
         for(auto h : Hgrid->hexen){
             if (h.boundaryHex()) {
                 for (int j=0;j<6;j++) {
-                    int i = int(h.vi)
+                    int i = int(h.vi);
                     if (N[h.vi][j] == i) {
                         this->NN[N[h.vi][j]] = NN[h.vi];
                         this->CC[N[h.vi][j]] = CC[h.vi];
@@ -348,7 +344,7 @@ public:
         // step N
         for (auto h : Hgrid->hexen) {
             NN[h.vi] += dt*( a-b*NN[h.vi] + Dn*this->lapNN[h.vi] - Dchi*CT[h.vi]);
-            this->sum_NN += fabs(this->NN[h.vi]);
+            this->sum_NN += fabs(this->NN[h.vi] - 1.0);
             this->sum_CT += fabs(this->CT[h.vi]);
         }
 
@@ -517,9 +513,9 @@ public:
             }
            // std::cout << "after integration of CC" << std::endl;
         }
-        sum_NN = sum_NN/(1.0*this->n);
+        sum_NN = sum_NN/(1.0*this->n) - 1.0;
         sum_lapNN = sum_lapNN/(1.0*this->n);
-        sum_CC = sum_NN/(1.0*this->n);
+        sum_CC = sum_NN/(1.0*this->n) - 2.5;
         sum_lapCC = sum_lapNN/(1.0*this->n);
         //cout  << "value of NN[5] end Runge " << this->NN[5] <<  " number of hexes " << this->n << endl;
     }//end step
@@ -856,10 +852,10 @@ public:
         return result;
     }
 
-    void setSignal(FLT radExp, FLT radMix, FLT aNoiseGain){
+    void signal(FLT radExp, FLT radMix, FLT aNoiseGain){
         for (auto h : this->Hgrid->hexen) {
             //this->NN[h.vi] = aNoiseGain * 0.01 * (exp(radExp * h.r*h.r)*radMix);
-            this->centralSignal[h.vi] = aNoiseGain  * (exp(radExp * h.r*h.r)*radMix);
+            this->CC[h.vi] = aNoiseGain * 0.0000000 * (exp(radExp * h.r*h.r)*radMix);
         }
     }
 

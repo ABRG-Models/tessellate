@@ -43,6 +43,67 @@ using std::runtime_error;
 using namespace morph;
 using namespace std;
 
+#ifdef COMPILE_PLOTTING
+class vtxVisual : public morph::VisualModel
+{
+public:
+    // class data
+    std::vector<std::vector<morph::Vector<FLT,3>>> vtx;
+    unsigned int size;
+    FLT linewidth = 0.00390625;
+    FLT radiusFixed = 0.00390625;
+    VBOint idx = 0;
+    morph::Vector<FLT,3> uz = {1.0f, 1.0f, 1.0f};
+    // class constructors
+    vtxVisual(GLuint sp, GLuint tsp, std::vector<std::vector<morph::Vector<FLT, 3>>> & _vtx, FLT line, FLT radius)
+    {
+        this->shaderprog = sp;
+        this->tshaderprog = tsp;
+        this->vtx = _vtx;
+        this->size = _vtx.size();
+        this->linewidth = line;
+        this->radiusFixed = radius;
+    }
+    //class methods
+    void initializeVertices() {
+        this->initv();
+        cout << " in initializeVertices after call to initv " << endl;
+    }
+
+    // Draw vertices for the net's actual locations
+    void initv() {
+    // Discs at the net vertices
+        cout << "entering intitv " << endl;
+        morph::Vector<FLT,3> puckthick = { 0, 0, 0.002 };
+        morph::Vector<FLT,3> linethick = {0, 0, 0.001};
+        morph::Vector<FLT,3> colStart = {0.0, 0.0, 0.0};
+        morph::Vector<FLT,3> colEnd = {0.0, 0.0, 0.0};
+        for (unsigned int j=0; j < this->size; ++j) {
+            unsigned int jsize = vtx[j].size();
+            for (unsigned int i=0; i < jsize; i++) {
+                cout << " initv vtx " << " i " << i << " j " << j << " is " << vtx[j][i] << endl;
+                this->computeTube (this->idx,
+                      this->vtx[j][i]+puckthick,
+                      this->vtx[j][i]-puckthick,
+                      morph::Vector<FLT,3>({1,0,0}), morph::Vector<FLT,3>({0,1,0}),
+                      colStart, colEnd,
+                      radiusFixed, 16);
+            }
+            cout << "after inner loop for computeTube " << endl;
+        }
+        cout << "after connect tube" << endl;
+        // Connection lines
+        for (unsigned int j=0; j < size; j++) {
+            unsigned int jsize = vtx[j].size();
+            for (unsigned int i=0; i < jsize; i++) {
+                morph::Vector<FLT, 3> c1 = this->vtx[j][i] + linethick;
+                morph::Vector<FLT, 3> c2 = this->vtx[j][(i+1)%jsize] + linethick;
+                this->computeLine (idx, c1, c2, this->uz, colStart, colEnd, linewidth, linewidth/4);
+            }
+        }
+    }
+}; //end of class vtxVisual
+#endif
 
 int main (int argc, char **argv)
 {
@@ -69,7 +130,7 @@ int main (int argc, char **argv)
         float ccInitialOffset = conf.getFloat("ccInitialOffset",2.5);
         float exponent = conf.getFloat("exponent", -100.0f);
         float radMix = conf.getFloat("radMix", 1.0f);
-        float lengthScale = conf.getFloat("lengthScale",25.0);
+        float lengthScale = conf.getFloat("lengthScale",29.0);
 #else
         double dt = conf.getDouble("dt",0.0001);
         double Dn = conf.getDouble("Dn",1.0);
@@ -80,11 +141,11 @@ int main (int argc, char **argv)
         double aNoiseGain = conf.getDouble("aNoiseGain",0.1);
         double nnInitialOffset = conf.getDouble("nnInitialOffset", 0.0);
         double ccInitialOffset = conf.getDouble("ccInitialOffset",2.5);
-        double lengthScale = ("lengthScale", 25.0);
+        double lengthScale = ("lengthScale", 29.0);
         double exponent = conf.getDouble("exponent", -100.0);
         double radMix = conf.getDouble("radMix", 1.0);
 #endif
-    int numSectors = conf.getInt("numSectors",12);
+    int numSectors = conf.getInt("numsectors",12);
     int scale = conf.getInt("scale",8);
     int numsteps = conf.getInt("numsteps",100);
     int numprint = conf.getInt("numprint",100);
@@ -98,9 +159,7 @@ int main (int argc, char **argv)
     unsigned int numpoints = conf.getInt("numpoints",41);
     unsigned int fov = conf.getInt("fov", 10);
     cout << " Lcontinue " << Lcontinue << " skipMorph " << skipMorph << endl;
-    ofstream degfile (logpath + "/degree.data", ios::app);
-    // this is important, correct dynamic timestep
-    dt = dt / floor(Dn);
+    ofstream afile (logpath + "/centroids.out",ios::app);
     // adjust the number of steps according to the Dn number
     //numsteps = numsteps * floor(sqrt(36.0/Dn));
     //numprint  = numprint * floor(sqrt(36.0/Dn));
@@ -109,7 +168,6 @@ int main (int argc, char **argv)
 
     std::cout << "LfixedSeed = " << LfixedSeed << std::endl;
     std::cout << "nnInitial " << nnInitialOffset << " ccInitial " << ccInitialOffset << std::endl;
-    std::cout << "lengthScale = " << lengthScale << " dt " << dt << std::endl;
     unsigned int seed;
     chrono::milliseconds ms1 = duration_cast<milliseconds>(system_clock::now().time_since_epoch());
     if (LfixedSeed)
@@ -176,10 +234,8 @@ int main (int argc, char **argv)
 
             if (lBoundZero) {
                 if (h.distToBoundary > -0.5) { // It's possible that distToBoundary is set to -1.0
-                    //S.NN[h.vi] = S.NN[h.vi] * bSig;
-                    //S.CC[h.vi] = S.CC[h.vi] * bSig;
-                    S.NN[h.vi] = (S.NN[h.vi] - nnInitialOffset) * bSig + nnInitialOffset;
-                    S.CC[h.vi] = (S.CC[h.vi] - ccInitialOffset) * bSig + ccInitialOffset;
+                    S.NN[h.vi] = S.NN[h.vi] * bSig;
+                    S.CC[h.vi] = S.CC[h.vi] * bSig;
                 }
             }
             /*
@@ -270,80 +326,21 @@ int main (int argc, char **argv)
     hgv1->finalize();
     v1.addVisualModel (hgv1);
     std::cout << "end of first visual block" << std::endl;
-    /*
-    // Set up a 3D map of the surface RD.c[0]
-    spatOff[0] = 0.0;
-    morph::HexGridVisual<FLT>* hgv2 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
-    hgv2->setSizeScale (myscale, myscale);
-    hgv2->setScalarData (&S.NN);
-    hgv2->zScale.setParams (_m/10.0f, _c/10.0f);
-    hgv2->setCScale (cscale);
-    hgv2->cm.setType (morph::ColourMapType::Jet);
-    //hgv2->hexVisMode = morph::HexVisMode::HexInterp;
-    hgv2->hexVisMode = morph::HexVisMode::Triangles;
-    //hgv2->addLabel ("c (chemoattractant)", {-0.7f, S.Hgrid->width()/2.0f, 0},
-    //                morph::colour::black, morph::VisualFont::Vera, 0.04f, 64);
-    hgv2->finalize();
-    v1.addVisualModel (hgv2);
-    // if using plotting, then set up the render clock
-    std::chrono::steady_clock::time_point lastrender = steady_clock::now();
-    std::cout << "end of  second visual block" << std::endl;
 
-    // Set up a 3D map of the surface RD.n[0] using a morph::HexGridVisual
-//    spatOff[0] -= 0.6 * (S.Hgrid->width());
-    spatOff[0] = S.Hgrid->width();
-    morph::HexGridVisual<FLT>* hgv3 = new morph::HexGridVisual<FLT> (v1.shaderprog, v1.tshaderprog, S.Hgrid, spatOff);
-    hgv3->setSizeScale (myscale, myscale);
-    hgv3->setScalarData (&S.CC);
-    // You can directly set VisualDataModel::zScale and ::colourScale:
-    hgv3->zScale.setParams (_m/10.0f, _c/10.0f);
-    // ...or use setters to copy one in:
-    hgv3->setCScale (cscale);
-    hgv3->cm.setType (morph::ColourMapType::Jet);
-    hgv3->hexVisMode = morph::HexVisMode::Triangles;
-    //hgv1->addLabel ("n (axon density)", {-0.6f, 2.0*S.Hgrid->width(), 0},
-    //                morph::colour::white, morph::VisualFont::Vera, 0.12f, 10);
-    hgv3->finalize();
-    v1.addVisualModel (hgv3);
-    std::cout << "end of third visual block" << std::endl;
-*/
 #endif
 
     std::cout << "numsteps " << numsteps << " plotevery " << plotEvery <<  std::endl;
     // begin morph0 time stepping loop
     std::pair<FLT, FLT> mm; // maxmin
     for (int i=0;i<numsteps;i++) {
-        S.step(dt, Dn, Dchi, Dc);
+        S.stepEuler(dt, Dn, Dchi, Dc);
 #ifdef COMPILE_PLOTTING
         if ((i % numprint) == 0) {
             //scale NN
             mm = morph::MathAlgo::maxmin (S.NN);
             std::cout << "NN max: " << mm.first << " NN min " << mm.second << std::endl;
             hgv1->colourScale.compute_autoscale (mm.second, mm.first);
-            /*
-            //scale lapNN
-            mm = morph::MathAlgo::maxmin (S.lapNN);
-            std::cout << "lapNN max: " << mm.first << " lapNN min " << mm.second << std::endl;
-            hgv2->colourScale.compute_autoscale (mm.second, mm.first);
-            //scale lapNN
-            mm = morph::MathAlgo::maxmin (S.CC);
-            std::cout << "CC max: " << mm.first << " CC min " << mm.second << std::endl;
-            hgv3->colourScale.compute_autoscale (mm.second, mm.first);
-            */
-            //update data
-            //update data
-            hgv1->updateData (&S.NN);
-            hgv1->clearAutoscaleColour();
-            /*
-            hgv2->updateData (&S.lapNN);
-            hgv2->clearAutoscaleColour();
-            hgv3->updateData (&S.CC);
-            hgv3->clearAutoscaleColour();
-            std::cout << std::setprecision(16) << " NNAverage " << S.sum_NN << " lapNNAverage " << S.sum_lapNN << " time step " << i << " plotevery " << plotEvery << std::endl;
-            gfile << std::setprecision(16) << S.sum_NN << std::endl;
-            */
             vidframes = true;
-            v1.render();
             if (i % plotEvery == 0) {
                 if (vidframes) {
                     savePngs (logpath, "nn0", framecount, v1);
@@ -354,7 +351,6 @@ int main (int argc, char **argv)
                 }
             }
         }
-        /*
         // rendering the graphics. After each simulation step, check if enough time
         // has elapsed for it to be necessary to call v1.render().
         steady_clock::duration sincerender = steady_clock::now() - lastrender;
@@ -363,31 +359,11 @@ int main (int argc, char **argv)
             v1.render();
             lastrender = steady_clock::now();
         }
-        */
     }
   //  cerr << "Ctrl-c or press x in graphics window to exit.\n";
   //  v1->keepOpen();
 #endif
     //code run at end of timestepping
-    //declaration of variables needed for analysis
-    vector <FLT> angleVector;
-    vector <FLT> radiusVector;
-    int degreeRadius;
-    int degreeAngle;
-    int angleOffset = 0;
-    int radiusOffset = (10 * numSectors) / 12; //what fraction of the radius do we start from?
-    FLT DegreeRadius = 0.0;
-    std::cout << "just before sectorize reg" << std::endl;
-    angleVector = S.sectorize_Circle_angle(numSectors,radiusOffset, numSectors, S.NN);
-    std::cout << "just before zeroangle" << std::endl;
-    degreeAngle = L.find_extrema_angle(angleVector);
-    std::cout << "just before sectorize radius" << std::endl;
-    //radial degree
-    degreeRadius = 0;
-    radiusVector = S.sectorize_Circle_radius(numSectors/2, angleOffset, angleOffset + numSectors, S.NN);
-    std::cout << "just before zeroradius morph0" << std::endl;
-    degreeRadius = L.find_extrema_radius(radiusVector);
-    degfile << degreeAngle/2 << " " << degreeRadius + 1<< " " <<endl<<flush;
     //first save the  ofstream outFile;
     cout << "just before first data write morph 0" << endl;
     morph::HdfData fdata(fname);

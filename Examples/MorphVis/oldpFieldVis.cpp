@@ -127,8 +127,8 @@ int main (int argc, char **argv)
         float diffTol = conf.getFloat("diffTol",1e-8);
         float lengthScale = conf.getFloat("lengthScale",29.0f);
         float exponent = conf.getFloat("exponent", -100.0f);
+        float radExp = conf.getFloat("radExp", -100.0f);
         float radMix = conf.getFloat("radMix", 1.0f);
-        float radExp = conf.getFloat("radExp", 1.0f);
 #else
         double dt = conf.getDouble("dt",0.001);
         double Dn = conf.getDouble("Dn",1.0);
@@ -142,8 +142,8 @@ int main (int argc, char **argv)
         double diffTol = conf.getDouble("diffTol",1e-8);
         double lengthScale = conf.getDouble("lengthScale",29.0);
         double exponent = conf.getDouble("exponent", -100.0);
+        double radExp = conf.getDouble("radEXp", -100.0);
         double radMix = conf.getDouble("radMix", 1.0);
-        double radExp = conf.getDouble("radExp", 1.0);
 #endif
     int numSectors = conf.getInt("numSectors",24);
     int scale = conf.getInt("scale",8);
@@ -396,7 +396,6 @@ int main (int argc, char **argv)
     for (unsigned int j=0;j<numpoints;j++) {
         S[j].Hgrid->computeDistanceToBoundary();
         S[j].setBoundaryFade(exponent, boundaryFalloffDist);
-        S[j].setSignal(radExp, radMix, aNoiseGain);
     }
 // initialise with random field
     if (Lcontinue) {
@@ -425,11 +424,11 @@ int main (int argc, char **argv)
                 if (choice > 0.5) {
                     if (lHomogen == true) {
                         S[j].NN[h.vi] = - ruf.get() * aNoiseGain   + nnInitialOffset;
-                        S[j].CC[h.vi] = - ruf.get() * aNoiseGain *  + ccInitialOffset;
+                        S[j].CC[h.vi] = - ruf.get() * aNoiseGain   + ccInitialOffset;
                     }
                     else {
-                        S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
-                        S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
+                        S[j].NN[h.vi] = aNoiseGain * (exp(radExp * h.r*h.r)*radMix + ruf.get());
+                        S[j].CC[h.vi] = aNoiseGain * (exp(radExp * h.r*h.r)*radMix + ruf.get());
                     }
                 }
                 else {
@@ -438,8 +437,8 @@ int main (int argc, char **argv)
                         S[j].CC[h.vi] = ruf.get() * aNoiseGain  + ccInitialOffset;
                     }
                     else {
-                        S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
-                        S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
+                        S[j].NN[h.vi] = aNoiseGain * (exp(radExp * h.r*h.r)*radMix + ruf.get());
+                        S[j].CC[h.vi] = aNoiseGain * (exp(radExp * h.r*h.r)*radMix + ruf.get());
                     }
                 }
                 //what about the boundary?
@@ -541,7 +540,7 @@ int main (int argc, char **argv)
     // begin morph0 time stepping loop
     for (unsigned int i=0;i<numsteps;i++) {
    	for (unsigned int j = 0;j<numpoints;j++) { //loop over all regions
-            S[j].step(dt, Dn, Dchi, Dc);
+            S[j].stepEuler(dt, Dn, Dchi, Dc);
             if (i%checkEvery == 0) {
                 NNdiffSum = 0.0;
                 NNcurr[j] = S[j].NN;
@@ -549,6 +548,11 @@ int main (int argc, char **argv)
                 NNpre[j] = NNcurr[j];
                 NNdiffSum += fabs(NNdiff[j]);
             }
+            /*
+            if (i%numAdjust == 0) {
+                S[j].signal(radExp, radMix, aNoiseGain);
+            }
+            */
         } //end of loop over regions
         if (i%checkEvery == 0) {
             cout << "NNdiffSum " << NNdiffSum << " i = " << i << endl;
@@ -618,12 +622,13 @@ int main (int argc, char **argv)
     //declaration of variables needed for analysis
     vector <FLT> angleVector;
     vector <FLT> radiusVector;
+    vector <int> radiusDVector;
     int degreeRadius;
     int degreeAngle;
     FLT tempArea = 0.0;
     FLT tempPerimeter = 0.0;
     int angleOffset = 0;
-    int radiusOffset = numSectors/2;
+    int radiusOffset = 0;
     FLT avDegreeRadius = 0.0;
     FLT avDegreeAngle = 0;
     FLT occupancy = 0.0;
@@ -647,13 +652,16 @@ int main (int argc, char **argv)
             angleVector = M.sectorize_reg_angle(j,numSectors,radiusOffset, numSectors, S[j].NN);
             std::cout << "just before extrema angle" << std::endl;
             degreeAngle = L.find_extrema_angle(angleVector);
+            avDegreeAngle += degreeAngle;
             std::cout << "just before sectorize radius" << std::endl;
             //radial degree
             degreeRadius = 0;
-            radiusVector = M.sectorize_reg_radius(j,numSectors/2, angleOffset, angleOffset + numSectors, S[j].NN);
+            //radiusVector = M.sectorize_reg_radius(j,numSectors/2, angleOffset, angleOffset + numSectors, S[j].NN);
+            radiusDVector = M.sectorize_reg_Dradius(j,numSectors/2, angleOffset, angleOffset + numSectors, S[j].NN);
             std::cout << "just before extrema radius morph0" << std::endl;
-            degreeRadius = L.find_extrema_radius(radiusVector);
-            degreeRadius += 1; //there must always be an extremum at the boundary
+            //degreeRadius = L.find_extrema_radius(radiusVector);
+            degreeRadius = L.find_zeroDRadius(radiusDVector);
+            //degreeRadius += 1; //there must always be an extremum at the boundary
             avDegreeRadius += degreeRadius;
             degfile1 << degreeAngle/2 << " " << degreeRadius  << " " << M.regNNfrac(j) << " " << tempArea << " "<< tempPerimeter<<endl<<flush;
 #ifdef RANDOM
@@ -753,7 +761,6 @@ int main (int argc, char **argv)
     for (unsigned int j=0;j<numpoints;j++) {
         S[j].Hgrid->computeDistanceToBoundary();
         S[j].setBoundaryFade(exponent, boundaryFalloffDist);
-        S[j].setSignal(radExp, radMix, aNoiseGain);
     }
 // initialise with random field
     if (Lcontinue) {
@@ -782,11 +789,11 @@ int main (int argc, char **argv)
                 if (choice > 0.5) {
                     if (lHomogen == true) {
                         S[j].NN[h.vi] = - ruf.get() * aNoiseGain   + nnInitialOffset;
-                        S[j].CC[h.vi] = - ruf.get() * aNoiseGain *  + ccInitialOffset;
+                        S[j].CC[h.vi] = - ruf.get() * aNoiseGain   + ccInitialOffset;
                     }
                     else {
-                        S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
-                        S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
+                        S[j].NN[h.vi] = aNoiseGain * (exp(radExp * h.r*h.r)*radMix + ruf.get());
+                        S[j].CC[h.vi] = aNoiseGain * (exp(radExp * h.r*h.r)*radMix + ruf.get());
                     }
                 }
                 else {
@@ -795,8 +802,8 @@ int main (int argc, char **argv)
                         S[j].CC[h.vi] = ruf.get() * aNoiseGain  + ccInitialOffset;
                     }
                     else {
-                        S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
-                        S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
+                        S[j].NN[h.vi] = aNoiseGain * (exp(radExp * h.r*h.r)*radMix + ruf.get());
+                        S[j].CC[h.vi] = aNoiseGain * (exp(radExp * h.r*h.r)*radMix + ruf.get());
                     }
                 }
                 //what about the boundary?
@@ -948,8 +955,8 @@ int main (int argc, char **argv)
                 NNdiffSum += NNdiff[j];
             }
             /*
-            if (i%numAdjust == 0) {
-                S[j].setBoundaryZero();
+            if (i%numAdjust == 0 ) {
+                S[j].signal(radExp, radMix, aNoiseGain);
             }
             */
         }
@@ -1025,6 +1032,7 @@ int main (int argc, char **argv)
      // write the NN and CC vals for each region
       gfile << endl << "analysis on first morphing iteration " << endl;
     angleVector.resize(0);
+    radiusDVector.resize(0);
     radiusVector.resize(0);
 
 
@@ -1073,10 +1081,12 @@ int main (int argc, char **argv)
             //radial degree
             degreeRadius = 0;
             std::cout << "just before sectorize_reg_Dradius morph1" << std::endl;
-            radiusVector = M.sectorize_reg_radius(j,numSectors/2, angleOffset, angleOffset + numSectors, S[j].NN);
+            //radiusVector = M.sectorize_reg_radius(j,numSectors/2, angleOffset, angleOffset + numSectors, S[j].NN);
+            radiusDVector = M.sectorize_reg_Dradius(j,numSectors/2, angleOffset, angleOffset + numSectors, S[j].NN);
             std::cout << "just before find extrema radius morph1" << std::endl;
-            degreeRadius = L.find_extrema_radius(radiusVector);
-            degreeRadius += 1; //there is always an extremum at the boundary
+            degreeRadius = L.find_zeroDRadius(radiusDVector);
+            //degreeRadius = L.find_extrema_radius(radiusVector);
+            //degreeRadius += 1; //there is always an extremum at the boundary
             avDegreeRadius += degreeRadius;
             degfile2 << degreeAngle/2 << " " << degreeRadius << " " << M.regNNfrac(j) << " " << tempArea << " "<< tempPerimeter<<endl<<flush;
     #ifdef RANDOM
@@ -1151,7 +1161,6 @@ int main (int argc, char **argv)
     for (unsigned int j=0;j<numpoints;j++) {
         S[j].Hgrid->computeDistanceToBoundary();
         S[j].setBoundaryFade(exponent, boundaryFalloffDist);
-        S[j].setSignal(radExp, radMix, aNoiseGain);
     }
 // initialise with random field
     string hname = logpath + "/third.h5";
@@ -1181,11 +1190,11 @@ int main (int argc, char **argv)
                 if (choice > 0.5) {
                     if (lHomogen == true) {
                         S[j].NN[h.vi] = - ruf.get() * aNoiseGain   + nnInitialOffset;
-                        S[j].CC[h.vi] = - ruf.get() * aNoiseGain *  + ccInitialOffset;
+                        S[j].CC[h.vi] = - ruf.get() * aNoiseGain   + ccInitialOffset;
                     }
                     else {
-                        S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
-                        S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
+                        S[j].NN[h.vi] = aNoiseGain * (exp(radExp * h.r*h.r)*radMix + ruf.get());
+                        S[j].CC[h.vi] = aNoiseGain * (exp(radExp * h.r*h.r)*radMix + ruf.get());
                     }
                 }
                 else {
@@ -1194,8 +1203,8 @@ int main (int argc, char **argv)
                         S[j].CC[h.vi] = ruf.get() * aNoiseGain  + ccInitialOffset;
                     }
                     else {
-                        S[j].NN[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
-                        S[j].CC[h.vi] = aNoiseGain * (exp(exponent * h.r*h.r)*radMix + ruf.get());
+                        S[j].NN[h.vi] = aNoiseGain * (exp(radExp * h.r*h.r)*radMix + ruf.get());
+                        S[j].CC[h.vi] = aNoiseGain * (exp(radExp * h.r*h.r)*radMix + ruf.get());
                     }
                 }
                 //what about the boundary?
@@ -1336,19 +1345,19 @@ int main (int argc, char **argv)
                 NNpre[j] = NNcurr[j];
                 NNdiffSum += NNdiff[j];
             }
-        /*
-        if (i%numAdjust == 0) {
-                S[j].setBoundaryZero();
+            /*
+            if (i%numAdjust == 0) {
+                S[j].signal(radExp, radMix, aNoiseGain);
             }
-        */
+            */
         }
-    if (i%checkEvery == 0) {
-        cout << "NNdiffSum " << NNdiffSum << " i = " << i << endl;
-        if (NNdiffSum/(numpoints*1.0) < diffTol) {
-            cout << "morphed converged step " << i << " field diff " << NNdiffSum/(1.0*numpoints) << " diffTol " << diffTol << std::endl;
-            break;
+        if (i%checkEvery == 0) {
+            cout << "NNdiffSum " << NNdiffSum << " i = " << i << endl;
+            if (NNdiffSum/(numpoints*1.0) < diffTol) {
+                cout << "morphed converged step " << i << " field diff " << NNdiffSum/(1.0*numpoints) << " diffTol " << diffTol << std::endl;
+                break;
+            }
         }
-    }
 #ifdef COMPILE_PLOTTING
     if((i % plotEvery) == 0) {
         for (unsigned int j=0; j<numpoints;j++) {
@@ -1416,6 +1425,7 @@ int main (int argc, char **argv)
     gfile << endl << "analysis on second morphing iteration " << endl;
     angleVector.resize(0);
     radiusVector.resize(0);
+    radiusDVector.resize(0);
 
 //computing average values over all regions
     avDegreeAngle = 0;
@@ -1453,10 +1463,12 @@ int main (int argc, char **argv)
             //radial degree
             degreeRadius = 0;
             std::cout << "just before sectorize_reg_Dradius morph2" << std::endl;
-            radiusVector = M.sectorize_reg_radius(j,numSectors/2, angleOffset, angleOffset + numSectors, S[j].NN);
+            //radiusVector = M.sectorize_reg_radius(j,numSectors/2, angleOffset, angleOffset + numSectors, S[j].NN);
+            radiusDVector = M.sectorize_reg_Dradius(j,numSectors/2, angleOffset, angleOffset + numSectors, S[j].NN);
             std::cout << "just before find_extrema_radius morph2" << std::endl;
-            degreeRadius = L.find_extrema_radius(radiusVector);
-            degreeRadius += 1; //there must always be an extremum at the boundary
+            degreeRadius = L.find_zeroDRadius(radiusDVector);
+           // degreeRadius = L.find_extrema_radius(radiusVector);
+           // degreeRadius += 1; //there must always be an extremum at the boundary
             avDegreeRadius += degreeRadius;
             degfile3 << degreeAngle/2 << " " << degreeRadius  << " " << M.regNNfrac(j) << " " << tempArea << " "<< tempPerimeter<<endl<<flush;
 #ifdef RANDOM

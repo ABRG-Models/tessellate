@@ -2645,6 +2645,7 @@ FLT regnnfrac (int regNum) {
         ofstream dfile (logpath + "/sectorRadius.txt",ios::app);
         ofstream efile (logpath + "/sectorRadius.data",ios::app);
         vector <FLT>  radiusNN;
+        vector <FLT> normalNN;
         vector <int> radiusCount;
         radiusCount.resize(numSectors,0);
         radiusNN.resize(numSectors,0);
@@ -2657,6 +2658,9 @@ FLT regnnfrac (int regNum) {
         angleInc = 2*PI/(1.*numSectors);
         startAngle = (beginAngle)*angleInc;
         finishAngle = (endAngle)*angleInc;
+        for (unsigned int i=0; i<fieldVal.size(); i++){
+            normalNN.push_back(fabs(fieldVal[i]));
+        }
 
         for (int k=0;k<numSectors;k++) {
             startradius = (k*radiusInc);
@@ -2666,7 +2670,7 @@ FLT regnnfrac (int regNum) {
                 if (h.phi >= startAngle && h.phi < finishAngle) {
                     if (h.r >= startradius && h.r <  finishradius) {
                         radiusCount[k]++;
-                        radiusNN[k] += fieldVal[count];
+                        radiusNN[k] += normalNN[count];
                     } //end of if on radius
                 } //end of if on angleSector
                 count++;
@@ -2779,6 +2783,7 @@ FLT regnnfrac (int regNum) {
         ofstream cfile (logpath + "/sectorAngle.txt",ios::app);
         ofstream efile (logpath + "/sectorAngle.data",ios::app);
         vector <FLT> angleNN; //average value of cc in each sector
+        vector <FLT> normalNN;
         vector <int> angleCount; //number of hexes in each sector
         angleNN.resize(numSectors,0);
         angleCount.resize(numSectors,0);
@@ -2791,6 +2796,10 @@ FLT regnnfrac (int regNum) {
         finishradius = endradius*radiusInc;
         angleInc = 2*PI/(1.*numSectors);
        cfile << "region " << regNum << " maxradius used " << maxradius << " minradius used " << minradius <<endl;
+// to normalise the NN field
+        for (unsigned int i=0; i<fieldVal.size(); i++){
+            normalNN.push_back(fieldVal[i]);
+        }
 
         for (int k=0;k<numSectors;k++) {
             startAngle = k*angleInc;
@@ -2802,7 +2811,7 @@ FLT regnnfrac (int regNum) {
                 if ( h.r  >= startradius && h.r < finishradius) {
                     if (h.phi >= startAngle && h.phi < endAngle) {
                         angleCount[k]++;
-                        angleNN[k] += fieldVal[count];
+                        angleNN[k] += normalNN[count];
                     }//end if on angle
                 }//end if on radius
                 count++;

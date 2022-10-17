@@ -1,7 +1,7 @@
-pair<float,float> v1 = make_pair (-0.750000, -0.750000);
-pair<float,float> v2 = make_pair (0.750000, -0.750000);
-pair<float,float> v3 = make_pair (0.750000, 0.750000);
-pair<float,float> v4 = make_pair (-0.750000, 0.750000);
+pair<float,float> v1 = make_pair (-0.700000, -0.700000);
+pair<float,float> v2 = make_pair (0.700000, -0.700000);
+pair<float,float> v3 = make_pair (0.700000, 0.700000);
+pair<float,float> v4 = make_pair (-0.700000, 0.700000);
 morph::BezCurve<float> c1(v1,v2);
 morph::BezCurve<float> c2(v2,v3);
 morph::BezCurve<float> c3(v3,v4);

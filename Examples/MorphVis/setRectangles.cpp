@@ -62,6 +62,7 @@ int main (int argc, char **argv)
         }
     }
     bfile << "sqSide = " << sqSide << " nTicks " << nTicks << " stretch " << stretch << " chessboard size " << count << std::endl;
+    bfile << "sqSidex " << sqSidex << " sqSidey " << sqSidey << std::endl;
 
     char sideX[10];
     sprintf(sideX, "%f", sqSidex);
