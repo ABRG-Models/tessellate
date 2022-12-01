@@ -58,3 +58,20 @@ The remaining examples directory makes reference to the following paper
 
 SwiftHohenberg: This solves the complex Swift-Hohenberg system as defined in Wolf2005a on different shaped domains.
 There exists the option to set periodic or no-flux boundary conditions.
+
+There is a also a directory Videos which contains videos of the results of the code. It currently contains
+a subdirectory Subbarrels which contains videos based on the code in MorphVis and which is documented a paper currently
+
+@article{Wolf2005a,
+  author = {BrookeWilson23},
+  title = {Cortical size alone cannot explain within-domain patterning},
+  journal = {PLos computational biology},
+  year = {2023},
+  volume = {},
+  pages = {},
+}
+
+this paper is based on Chapter 3 of J.M.Brooke's PhD Thesis "The effects of geometry and dynamics on biological pattern formation
+
+
+being drafted
